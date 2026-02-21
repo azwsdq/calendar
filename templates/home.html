@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Календарь</title>
+    <style>
+        .calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+        }
+        .day {
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-height: 100px;
+        }
+        .event {
+            background: #4CAF50;
+            color: white;
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ month_name }} {{ year }}</h1>
+
+    <form method="POST" action="/add-event">
+        <input type="text" name="title" placeholder="Название" required>
+        <input type="date" name="date" required>
+        <input type="text" name="description" placeholder="Описание">
+        <button type="submit">Добавить</button>
+    </form>
+
+    <div class="calendar">
+        {% for week in calendar %}
+            {% for day in week %}
+                <div class="day">
+                    {% if day != 0 %}
+                        {{ day }}
+                        {% for event in events %}
+                            {% if event.date|split('-')|last|int == day %}
+                                <div class="event">{{ event.title }}</div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+</body>
+</html>
