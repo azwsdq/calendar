@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Календарь</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body>
+    <h1>{{ month_name }} {{ year }}</h1>
+
+    <!-- Форма добавления -->
+    <!-- action="/add-event" отправляет данные на сервер -->
+    <!-- method="POST" означает запись данных -->
+    <form action="/add-event" method="POST">
+        <input type="text" name="title" placeholder="Название события" required>
+        <input type="date" name="date" required>
+        <input type="text" name="description" placeholder="Описание">
+        <button type="submit">Добавить событие</button>
+    </form>
+
+    <!-- Сетка календаря -->
+    <div class="calendar">
+        <div class="weekday">Пн</div>
+        <div class="weekday">Вт</div>
+        <div class="weekday">Ср</div>
+        <div class="weekday">Чт</div>
+        <div class="weekday">Пт</div>
+        <div class="weekday">Сб</div>
+        <div class="weekday">Вс</div>
+
+        {% for week in calendar %}
+            {% for day in week %}
+                <div class="day">
+                    {% if day != 0 %}
+                        <strong>{{ day }}</strong>
+                        {% for event in events %}
+                            {% if event.date.day == day and event.date.month == month and event.date.year == year %}
+                                <div class="event">{{ event.title }}</div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+</body>
+</html>

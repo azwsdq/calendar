@@ -1,1 +1,3 @@
-fastapi unicorn
+fastapi
+uvicorn
+sqlalchemy

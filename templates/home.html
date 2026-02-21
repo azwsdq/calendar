@@ -26,6 +26,7 @@
     <h1>{{ month_name }} {{ year }}</h1>
 
     <form method="POST" action="/add-event">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="title" placeholder="Название" required>
         <input type="date" name="date" required>
         <input type="text" name="description" placeholder="Описание">
@@ -39,7 +40,11 @@
                     {% if day != 0 %}
                         {{ day }}
                         {% for event in events %}
-                            {% if event.date|split('-')|last|int == day %}
+                            {% set date_parts = event.date.split('-') %}
+                            {% set event_year = date_parts[0]|int %}
+                            {% set event_month = date_parts[1]|int %}
+                            {% set event_day = date_parts[2]|int %}
+                            {% if event_year == year and event_month == month and event_day == day %}
                                 <div class="event">{{ event.title }}</div>
                             {% endif %}
                         {% endfor %}
