@@ -34,9 +34,10 @@ def create_calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
         builder.button(text=str(day), callback_data=f"day_{date_str}")
 
     builder.adjust(7)
-    builder.button(text="➕ Добавить", callback_data="add_event")
+    builder.button(text="➕ Создать событие", callback_data="add_event")
     builder.button(text="📋 Все события", callback_data="all_events")
-    builder.adjust(2)
+    builder.button(text="❓ Помощь", callback_data="help_info")
+    builder.adjust(3)
 
     return builder.as_markup()
 
@@ -52,12 +53,15 @@ def create_event_keyboard(event_id: int) -> InlineKeyboardMarkup:
 def create_events_list_keyboard(events: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for event in events[:10]:
+        date_obj = datetime.strptime(event['event_date'], '%Y-%m-%d')
+        date_display = date_obj.strftime('%d-%m-%Y')
+        event_text = f"📌 {event['title'][:15]} ({date_display})"
         builder.button(
-            text=f"📌 {event['title'][:20]}",
+            text=event_text,
             callback_data=f"view_{event['id']}"
         )
     builder.adjust(1)
-    builder.button(text="🔙 Назад к календарю", callback_data="back_calendar")
+    builder.button(text="🔙 Назад в календарь", callback_data="back_calendar")
     return builder.as_markup()
 
 

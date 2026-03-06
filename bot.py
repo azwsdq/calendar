@@ -40,9 +40,10 @@ async def cmd_start(message: types.Message):
 
 @dp.message(Command("calendar"))
 async def cmd_calendar(message: types.Message):
-    now = datetime.now()
-    keyboard = create_calendar_keyboard(now.year, now.month)
-    await message.answer("📅 Выберите дату:", reply_markup=keyboard)
+    pass
+    # now = datetime.now()
+    # keyboard = create_calendar_keyboard(now.year, now.month)
+    # await message.answer("📅 Выберите дату:", reply_markup=keyboard)
 
 @dp.message(Command("add"))
 async def cmd_add(message: types.Message, state: FSMContext):
@@ -132,6 +133,46 @@ async def back_calendar(callback: types.CallbackQuery):
     now = datetime.now()
     keyboard = create_calendar_keyboard(now.year, now.month)
     await callback.message.edit_text("📅 Выберите дату:", reply_markup=keyboard)
+    await callback.answer()
+
+@dp.callback_query(F.data == "help_info")
+async def help_info(callback: types.CallbackQuery):
+    help_text = """
+🤖 **Помощь по боту**
+
+📅 **Команды:**
+/start - Запустить бота
+/calendar - Открыть календарь
+/add - Добавить событие
+/events - Показать все события
+/help - Эта справка
+
+📝 **Как использовать:**
+1. Откройте календарь командой /calendar
+2. Выберите дату для просмотра событий
+3. Добавьте событие через ➕ Создать событие
+4. Управляйте событиями через кнопки
+    """
+    await callback.message.answer(help_text)
+    await callback.answer()
+
+@dp.callback_query(F.data == "all_events")
+async def all_events_callback(callback: types.CallbackQuery):
+    events = await get_all_user_events(callback.from_user.id)
+    if not events:
+        await callback.answer("📭 У вас пока нет событий.", show_alert=True)
+        return
+    text = "📋 Ваши события:\n\n"
+    for event in events:
+        text += f"📌 {event['title']}\n"
+        date_obj = datetime.strptime(event['event_date'], '%Y-%m-%d')
+        date_display = date_obj.strftime('%d-%m-%Y')
+        text += f"📅 {date_display}"
+        if event['event_time']:
+            text += f" ⏰ {event['event_time']}"
+        text += "\n\n"
+    keyboard = create_events_list_keyboard(events)
+    await callback.message.answer(text[:4096], reply_markup=keyboard)
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("view_"))
