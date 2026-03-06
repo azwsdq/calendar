@@ -1,0 +1,81 @@
+/* Основные стили для календаря */
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+form {
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+form input {
+    margin: 5px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+form button {
+    padding: 8px 15px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+form button:hover {
+    background-color: #45a049;
+}
+
+.calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.weekday {
+    font-weight: bold;
+    text-align: center;
+    padding: 10px;
+    background-color: #f0f0f0;
+}
+
+.day {
+    min-height: 100px;
+    border: 1px solid #ddd;
+    padding: 5px;
+    background-color: white;
+}
+
+.day strong {
+    display: block;
+    color: #333;
+}
+
+.event {
+    background-color: #4CAF50;
+    color: white;
+    padding: 3px 5px;
+    margin-top: 3px;
+    border-radius: 3px;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
