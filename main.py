@@ -68,3 +68,18 @@ async def add_event(
 
     #возвращение обратно
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/delete_event")
+async def delete_event(
+        event_id: int = Form(...),
+        year: int = Form(...),
+        month: int = Form(...),
+        db: Session = Depends(get_db)
+):
+    event_to_delete = db.query(event).filter(event.id == event_id).first()
+    if event_to_delete:
+        db.delete(event_to_delete)
+        db.commit()
+
+    return RedirectResponse(url=f"/?year={year}&month={month}", status_code=303)

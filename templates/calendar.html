@@ -33,7 +33,15 @@
                     {% if day != 0 %}
                         <strong>{{ day }}</strong>
                         {% for item in events_by_day.get(day, []) %}
-                            <div class="event" title="{{ item.description }}">{{ item.title }}</div>
+                                <div class="event" title="{{ item.description }}">
+                                <span>{{ item.title }}</span>
+                                <form class="event-delete-form" action="/delete_event" method="POST">
+                                    <input type="hidden" name="event_id" value="{{ item.id }}">
+                                    <input type="hidden" name="year" value="{{ year }}">
+                                    <input type="hidden" name="month" value="{{ month }}">
+                                    <button class="event-delete" type="submit" title="Удалить" onclick="return confirm('Удалить задачу?');">x</button>
+                                </form>
+                            </div>
                         {% endfor %}
                     {% endif %}
                 </div>
