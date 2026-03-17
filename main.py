@@ -21,17 +21,30 @@ async def calendar_page(request: Request, db: Session = Depends(get_db), year: i
     year = year or now.year
     month = month or now.month
 
-    events = db.query(event).all() #получаем все события из базы данных
-    cal = calendar.monthcalendar(year, month)
-    monthname = calendar.month_name[month]
+    month_calendar = calendar.monthcalendar(year, month)
+    month_name = calendar.month_name[month]
+
+    # Загружаем только события выбранного месяца и года.
+    month_events = (
+        db.query(event)
+        .filter(
+            event.date >= datetime(year, month, 1).date(),
+            event.date < datetime(year + (1 if month == 12 else 0), (month % 12) + 1, 1).date(),
+        )
+        .all()
+    )
+
+    events_by_day = {}
+    for item in month_events:
+        events_by_day.setdefault(item.date.day, []).append(item)
 
     return templates.TemplateResponse("calendar.html", {
         "request": request,
         "year": year,
         "month": month,
-        "monthname": monthname,
-        "cal": cal,
-        "events": events
+        "month_name": month_name,
+        "calendar": month_calendar,
+        "events_by_day": events_by_day,
     })
 
 #! ДОБОВЛЕНИЕ СОБЫТИЯ

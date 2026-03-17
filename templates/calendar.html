@@ -32,10 +32,8 @@
                 <div class="day">
                     {% if day != 0 %}
                         <strong>{{ day }}</strong>
-                        {% for event in events %}
-                            {% if event.date.day == day and event.date.month == month and event.date.year == year %}
-                                <div class="event">{{ event.title }}</div>
-                            {% endif %}
+                        {% for item in events_by_day.get(day, []) %}
+                            <div class="event" title="{{ item.description }}">{{ item.title }}</div>
                         {% endfor %}
                     {% endif %}
                 </div>
