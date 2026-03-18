@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, Form, Depends
+from typing import Optional
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -52,7 +53,7 @@ async def calendar_page(request: Request, db: Session = Depends(get_db), year: i
 async def add_event(
         title: str = Form(...),
         date: str = Form(...),
-        description: str = Form(...),
+        description: Optional[str] = Form(None),
         db: Session = Depends(get_db)
 ):
     #Создание события в базе данных
@@ -83,3 +84,59 @@ async def delete_event(
         db.commit()
 
     return RedirectResponse(url=f"/?year={year}&month={month}", status_code=303)
+
+
+@app.get("/tasks")
+async def tasks_page(request: Request, db: Session = Depends(get_db)):
+    tasks = db.query(event).order_by(event.date).all()
+    return templates.TemplateResponse("tasks.html", {
+        "request": request,
+        "tasks": tasks,
+        "today": datetime.now().date(),
+    })
+
+
+@app.post("/add_task")
+async def add_task(
+        title: str = Form(...),
+        description: Optional[str] = Form(None),
+        due_date: str = Form(...),
+        db: Session = Depends(get_db)
+):
+    new_event = event(
+        title=title,
+        description=description,
+        date=datetime.strptime(due_date, "%Y-%m-%d").date(),
+    )
+    db.add(new_event)
+    db.commit()
+    return RedirectResponse(url="/tasks", status_code=303)
+
+
+@app.post("/delete_task")
+async def delete_task(
+        task_id: int = Form(...),
+        db: Session = Depends(get_db)
+):
+    task = db.query(event).filter(event.id == task_id).first()
+    if task:
+        db.delete(task)
+        db.commit()
+    return RedirectResponse(url="/tasks", status_code=303)
+
+
+@app.post("/edit_task")
+async def edit_task(
+        task_id: int = Form(...),
+        title: str = Form(...),
+        description: Optional[str] = Form(None),
+        due_date: str = Form(...),
+        db: Session = Depends(get_db)
+):
+    task = db.query(event).filter(event.id == task_id).first()
+    if task:
+        task.title = title
+        task.description = description
+        task.date = datetime.strptime(due_date, "%Y-%m-%d").date()
+        db.commit()
+    return RedirectResponse(url="/tasks", status_code=303)
