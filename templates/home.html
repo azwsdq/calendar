@@ -1,57 +1,67 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Календарь</title>
-    <style>
-        .calendar {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 5px;
-        }
-        .day {
-            border: 1px solid #ccc;
-            padding: 10px;
-            min-height: 100px;
-        }
-        .event {
-            background: #4CAF50;
-            color: white;
-            padding: 5px;
-            margin: 2px 0;
-            border-radius: 3px;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ month_name }} {{ year }} — Календарь</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>{{ month_name }} {{ year }}</h1>
 
-    <form method="POST" action="/add-event">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="title" placeholder="Название" required>
-        <input type="date" name="date" required>
-        <input type="text" name="description" placeholder="Описание">
-        <button type="submit">Добавить</button>
-    </form>
+    <header class="app-header">
+        <a class="app-logo" href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            Календарь
+        </a>
+    </header>
 
-    <div class="calendar">
-        {% for week in calendar %}
-            {% for day in week %}
-                <div class="day">
-                    {% if day != 0 %}
-                        {{ day }}
-                        {% for event in events %}
-                            {% set date_parts = event.date.split('-') %}
-                            {% set event_year = date_parts[0]|int %}
-                            {% set event_month = date_parts[1]|int %}
-                            {% set event_day = date_parts[2]|int %}
-                            {% if event_year == year and event_month == month and event_day == day %}
-                                <div class="event">{{ event.title }}</div>
-                            {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            {% endfor %}
-        {% endfor %}
+    <div class="app-container">
+
+        <div class="month-header">
+            <h1 class="month-title">{{ month_name }} {{ year }}</h1>
+        </div>
+
+        <div class="add-form-card">
+            <h2>Новое событие</h2>
+            <form class="add-form" method="POST" action="/add-event">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="text" name="title" placeholder="Название" aria-label="Название" required>
+                <input type="date" name="date" aria-label="Дата" required>
+                <input type="text" name="description" placeholder="Описание" aria-label="Описание">
+                <button type="submit" class="btn-primary">+ Добавить</button>
+            </form>
+        </div>
+
+        <div class="calendar-card">
+            <div class="calendar">
+                {% for week in calendar %}
+                    {% for day in week %}
+                        {% if day == 0 %}
+                            <div class="day empty"></div>
+                        {% else %}
+                            <div class="day">
+                                <span class="day-num">{{ day }}</span>
+                                {% for event in events %}
+                                    {% set date_parts = event.date.split('-') %}
+                                    {% set event_year  = date_parts[0]|int %}
+                                    {% set event_month = date_parts[1]|int %}
+                                    {% set event_day   = date_parts[2]|int %}
+                                    {% if event_year == year and event_month == month and event_day == day %}
+                                        <div class="event">{{ event.title }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+
     </div>
 </body>
 </html>
