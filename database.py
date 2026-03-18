@@ -5,13 +5,9 @@ from dotenv import load_dotenv
 from urllib.parse import quote_plus
 import os
 
-<<<<<<< HEAD
-SQLALCHEMY_DATABASE_URL = "sqlite:///calendar.db"
-=======
 load_dotenv()
 
-# Можно задать готовую строку подключения DATABASE_URL,
-# либо собрать её из DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME.
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     db_user = os.getenv("DB_USER")
@@ -29,7 +25,6 @@ if not DATABASE_URL:
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
->>>>>>> 413a800 (Добавление поддержки PostgreSQL в database.py и обновление README.md с инструкциями по настройке БД)
 
 
 def get_db():
