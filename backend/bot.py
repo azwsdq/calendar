@@ -1,4 +1,8 @@
 # bot.py
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict
@@ -11,11 +15,11 @@ from aiogram.types import ReplyKeyboardRemove
 from aiogram.client.bot import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 
-from config import BOT_TOKEN, DB_PATH
+from config import BOT_TOKEN, SITE_URL
 from database import (
-    init_db, get_or_create_user, get_user_token,
+    init_db, close_pool, get_or_create_user, get_user_token,
     add_event, get_events_by_date, get_all_user_events,
-    delete_event, get_event, update_event
+    delete_event, get_event, update_event, create_auth_token
 )
 from keyboards import (
     create_calendar_keyboard, create_event_keyboard,
@@ -55,7 +59,11 @@ class EditEvent(StatesGroup):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    user_token = await get_or_create_user(message.from_user.id)
+    user_token = await get_or_create_user(
+        message.from_user.id,
+        first_name=message.from_user.first_name,
+        username=message.from_user.username
+    )
 
     await message.answer(
         f"Привет, {message.from_user.first_name}!\n\n"
@@ -63,7 +71,31 @@ async def cmd_start(message: types.Message):
         "/calendar - Открыть календарь\n"
         "/add - Добавить событие\n"
         "/events - Все события\n"
+        "/login - Войти на сайт\n"
         "/help - Помощь"
+    )
+
+
+@dp.message(Command("login"))
+async def cmd_login(message: types.Message):
+    """Генерирует одноразовую ссылку для входа на сайт"""
+    user_token = await get_user_token(message.from_user.id)
+    if not user_token:
+        user_token = await get_or_create_user(
+            message.from_user.id,
+            first_name=message.from_user.first_name,
+            username=message.from_user.username
+        )
+
+    auth_token = await create_auth_token(user_token)
+    login_url = f"{SITE_URL}/auth/telegram?token={auth_token}"
+
+    await message.answer(
+        "Нажмите на кнопку ниже, чтобы войти на сайт.\n"
+        "Ссылка действует <b>5 минут</b> и может быть использована только один раз.",
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="Войти на сайт", url=login_url)]
+        ])
     )
 
 
@@ -71,7 +103,11 @@ async def cmd_start(message: types.Message):
 async def cmd_calendar(message: types.Message):
     user_token = await get_user_token(message.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(message.from_user.id)
+        user_token = await get_or_create_user(
+            message.from_user.id,
+            first_name=message.from_user.first_name,
+            username=message.from_user.username
+        )
 
     now = datetime.now()
     keyboard = create_calendar_keyboard(now.year, now.month)
@@ -82,7 +118,11 @@ async def cmd_calendar(message: types.Message):
 async def cmd_add(message: types.Message, state: FSMContext):
     user_token = await get_user_token(message.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(message.from_user.id)
+        user_token = await get_or_create_user(
+            message.from_user.id,
+            first_name=message.from_user.first_name,
+            username=message.from_user.username
+        )
 
     await state.update_data(user_token=user_token)
     await message.answer("Введите название события:", reply_markup=create_cancel_keyboard())
@@ -124,6 +164,7 @@ async def cmd_help(message: types.Message):
 /calendar - Открыть календарь
 /add - Добавить событие
 /events - Показать все события
+/login - Войти на сайт
 /help - Эта справка
 
 Как использовать:
@@ -131,6 +172,7 @@ async def cmd_help(message: types.Message):
 2. Выберите дату для просмотра событий
 3. Добавьте событие через + Создать событие
 4. Управляйте событиями через кнопки
+5. Войдите на сайт через /login
     """
     await message.answer(help_text)
 
@@ -157,7 +199,11 @@ async def navigate_calendar(callback: types.CallbackQuery):
 async def select_day(callback: types.CallbackQuery):
     user_token = await get_user_token(callback.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(callback.from_user.id)
+        user_token = await get_or_create_user(
+            callback.from_user.id,
+            first_name=callback.from_user.first_name,
+            username=callback.from_user.username
+        )
 
     date = callback.data.split('_', 1)[1]
     date_obj = datetime.strptime(date, '%Y-%m-%d')
@@ -185,7 +231,11 @@ async def select_day(callback: types.CallbackQuery):
 async def add_event_callback(callback: types.CallbackQuery, state: FSMContext):
     user_token = await get_user_token(callback.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(callback.from_user.id)
+        user_token = await get_or_create_user(
+            callback.from_user.id,
+            first_name=callback.from_user.first_name,
+            username=callback.from_user.username
+        )
 
     await state.update_data(user_token=user_token)
     await callback.message.answer("Введите название события:", reply_markup=create_cancel_keyboard())
@@ -211,6 +261,7 @@ async def help_info(callback: types.CallbackQuery):
 /calendar - Открыть календарь
 /add - Добавить событие
 /events - Показать все события
+/login - Войти на сайт
 /help - Эта справка
     """
     await callback.message.answer(help_text)
@@ -248,7 +299,11 @@ async def all_events_callback(callback: types.CallbackQuery):
 async def view_event(callback: types.CallbackQuery):
     user_token = await get_user_token(callback.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(callback.from_user.id)
+        user_token = await get_or_create_user(
+            callback.from_user.id,
+            first_name=callback.from_user.first_name,
+            username=callback.from_user.username
+        )
 
     event_id = int(callback.data.split('_', 1)[1])
     event = await get_event(event_id, user_token)
@@ -273,7 +328,11 @@ async def view_event(callback: types.CallbackQuery):
 async def delete_event_callback(callback: types.CallbackQuery):
     user_token = await get_user_token(callback.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(callback.from_user.id)
+        user_token = await get_or_create_user(
+            callback.from_user.id,
+            first_name=callback.from_user.first_name,
+            username=callback.from_user.username
+        )
 
     event_id = int(callback.data.split('_', 1)[1])
     success = await delete_event(event_id, user_token)
@@ -289,7 +348,11 @@ async def delete_event_callback(callback: types.CallbackQuery):
 async def edit_event_callback(callback: types.CallbackQuery, state: FSMContext):
     user_token = await get_user_token(callback.from_user.id)
     if not user_token:
-        user_token = await get_or_create_user(callback.from_user.id)
+        user_token = await get_or_create_user(
+            callback.from_user.id,
+            first_name=callback.from_user.first_name,
+            username=callback.from_user.username
+        )
 
     event_id = int(callback.data.split('_', 1)[1])
     await state.update_data(event_id=event_id, user_token=user_token)
@@ -367,7 +430,11 @@ async def process_time(message: types.Message, state: FSMContext):
     if not user_token:
         user_token = await get_user_token(message.from_user.id)
         if not user_token:
-            user_token = await get_or_create_user(message.from_user.id)
+            user_token = await get_or_create_user(
+                message.from_user.id,
+                first_name=message.from_user.first_name,
+                username=message.from_user.username
+            )
 
     await add_event(
         user_token=user_token,
@@ -465,6 +532,7 @@ async def main():
     except KeyboardInterrupt:
         print("Остановка бота")
     finally:
+        await close_pool()
         await bot.session.close()
 
 
