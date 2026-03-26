@@ -6,18 +6,123 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import calendar
+import os
+import bcrypt
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import engine, get_db, Base
-from models import event
+from models import event, User
 
-Base.metadata.create_all(bind=engine) # Создаем таблицы в базе данных, если они еще не существуют
-app = FastAPI()  #! не удалять
+Base.metadata.create_all(bind=engine)
+app = FastAPI()
 
-templates = Jinja2Templates(directory="templates")  #? показывает где находятся шаблоны HTML
-app.mount("/static", StaticFiles(directory="static"), name="static")  #? показывает где нахоятся статические файлы (CSS, JS, изображения)
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+
+# ── Auth middleware ─────────────────────────────────────────────────────────
+class AuthMiddleware(BaseHTTPMiddleware):
+    PUBLIC = {"/login", "/register"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/static") or path in self.PUBLIC:
+            return await call_next(request)
+        if not request.session.get("user_id"):
+            return RedirectResponse(url="/login", status_code=302)
+        return await call_next(request)
+
+# SessionMiddleware must be added AFTER AuthMiddleware so it wraps it
+# (Starlette applies middleware in reverse-add order)
+app.add_middleware(AuthMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "change-me-in-production"),
+    session_cookie="session",
+    max_age=86400 * 7,  # 7 days
+    https_only=False,
+)
+
+
+# ── Password helpers ────────────────────────────────────────────────────────
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+# ── Auth routes ─────────────────────────────────────────────────────────────
+@app.get("/register")
+async def register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request, "error": None})
+
+@app.post("/register")
+async def register(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    if password != password_confirm:
+        error = "Пароли не совпадают"
+    elif len(password) < 8:
+        error = "Пароль должен содержать не менее 8 символов"
+    elif db.query(User).filter(User.email == email).first():
+        error = "Пользователь с таким email уже существует"
+    else:
+        error = None
+
+    if error:
+        return templates.TemplateResponse("register.html", {
+            "request": request, "error": error, "email": email,
+        })
+
+    user = User(email=email, hashed_password=hash_password(password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    request.session["user_id"] = user.id
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+@app.post("/login")
+async def login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.hashed_password):
+        return templates.TemplateResponse("login.html", {
+            "request": request, "error": "Неверный email или пароль", "email": email,
+        })
+    request.session["user_id"] = user.id
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
+
+# ── Calendar routes ─────────────────────────────────────────────────────────
 @app.get("/")
-async def calendar_page(request: Request, db: Session = Depends(get_db), year: int = None, month: int = None):
+async def calendar_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    year: int = None,
+    month: int = None,
+):
     now = datetime.now()
     year = year or now.year
     month = month or now.month
@@ -25,10 +130,11 @@ async def calendar_page(request: Request, db: Session = Depends(get_db), year: i
     month_calendar = calendar.monthcalendar(year, month)
     month_name = calendar.month_name[month]
 
-    # Загружаем только события выбранного месяца и года.
+    user_id = request.session.get("user_id")
     month_events = (
         db.query(event)
         .filter(
+            event.user_id == user_id,
             event.date >= datetime(year, month, 1).date(),
             event.date < datetime(year + (1 if month == 12 else 0), (month % 12) + 1, 1).date(),
         )
@@ -48,47 +154,48 @@ async def calendar_page(request: Request, db: Session = Depends(get_db), year: i
         "events_by_day": events_by_day,
     })
 
-#! ДОБОВЛЕНИЕ СОБЫТИЯ
+
 @app.post("/add_event")
 async def add_event(
-        title: str = Form(...),
-        date: str = Form(...),
-        description: Optional[str] = Form(None),
-        db: Session = Depends(get_db)
+    request: Request,
+    title: str = Form(...),
+    date: str = Form(...),
+    description: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
 ):
-    #Создание события в базе данных
     new_event = event(
         title=title,
         date=datetime.strptime(date, "%Y-%m-%d").date(),
-        description=description
+        description=description,
+        user_id=request.session.get("user_id"),
     )
-    #Сохранение в БД
     db.add(new_event)
     db.commit()
     db.refresh(new_event)
-
-    #возвращение обратно
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/delete_event")
 async def delete_event(
-        event_id: int = Form(...),
-        year: int = Form(...),
-        month: int = Form(...),
-        db: Session = Depends(get_db)
+    request: Request,
+    event_id: int = Form(...),
+    year: int = Form(...),
+    month: int = Form(...),
+    db: Session = Depends(get_db),
 ):
-    event_to_delete = db.query(event).filter(event.id == event_id).first()
-    if event_to_delete:
-        db.delete(event_to_delete)
+    user_id = request.session.get("user_id")
+    ev = db.query(event).filter(event.id == event_id, event.user_id == user_id).first()
+    if ev:
+        db.delete(ev)
         db.commit()
-
     return RedirectResponse(url=f"/?year={year}&month={month}", status_code=303)
 
 
+# ── Tasks routes ─────────────────────────────────────────────────────────────
 @app.get("/tasks")
 async def tasks_page(request: Request, db: Session = Depends(get_db)):
-    tasks = db.query(event).order_by(event.date).all()
+    user_id = request.session.get("user_id")
+    tasks = db.query(event).filter(event.user_id == user_id).order_by(event.date).all()
     return templates.TemplateResponse("tasks.html", {
         "request": request,
         "tasks": tasks,
@@ -98,15 +205,17 @@ async def tasks_page(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/add_task")
 async def add_task(
-        title: str = Form(...),
-        description: Optional[str] = Form(None),
-        due_date: str = Form(...),
-        db: Session = Depends(get_db)
+    request: Request,
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    due_date: str = Form(...),
+    db: Session = Depends(get_db),
 ):
     new_event = event(
         title=title,
         description=description,
         date=datetime.strptime(due_date, "%Y-%m-%d").date(),
+        user_id=request.session.get("user_id"),
     )
     db.add(new_event)
     db.commit()
@@ -115,10 +224,12 @@ async def add_task(
 
 @app.post("/delete_task")
 async def delete_task(
-        task_id: int = Form(...),
-        db: Session = Depends(get_db)
+    request: Request,
+    task_id: int = Form(...),
+    db: Session = Depends(get_db),
 ):
-    task = db.query(event).filter(event.id == task_id).first()
+    user_id = request.session.get("user_id")
+    task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
     if task:
         db.delete(task)
         db.commit()
@@ -127,13 +238,15 @@ async def delete_task(
 
 @app.post("/edit_task")
 async def edit_task(
-        task_id: int = Form(...),
-        title: str = Form(...),
-        description: Optional[str] = Form(None),
-        due_date: str = Form(...),
-        db: Session = Depends(get_db)
+    request: Request,
+    task_id: int = Form(...),
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    due_date: str = Form(...),
+    db: Session = Depends(get_db),
 ):
-    task = db.query(event).filter(event.id == task_id).first()
+    user_id = request.session.get("user_id")
+    task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
     if task:
         task.title = title
         task.description = description
