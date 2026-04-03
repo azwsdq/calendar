@@ -22,7 +22,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 
-# ── Auth middleware ─────────────────────────────────────────────────────────
+# Middleware аутентификации — перенаправляет незалогиненных пользователей на /login
 class AuthMiddleware(BaseHTTPMiddleware):
     PUBLIC = {"/login", "/register"}
 
@@ -34,19 +34,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse(url="/login", status_code=302)
         return await call_next(request)
 
-# SessionMiddleware must be added AFTER AuthMiddleware so it wraps it
-# (Starlette applies middleware in reverse-add order)
+# SessionMiddleware добавляется после AuthMiddleware — Starlette применяет middleware в обратном порядке
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("SECRET_KEY", "change-me-in-production"),
     session_cookie="session",
-    max_age=86400 * 7,  # 7 days
+    max_age=86400 * 7,
     https_only=False,
 )
 
 
-# ── Password helpers ────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -54,7 +52,6 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-# ── Auth routes ─────────────────────────────────────────────────────────────
 @app.get("/register")
 async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request, "error": None})
@@ -115,7 +112,6 @@ async def logout(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 
-# ── Calendar routes ─────────────────────────────────────────────────────────
 @app.get("/")
 async def calendar_page(
     request: Request,
@@ -191,7 +187,6 @@ async def delete_event(
     return RedirectResponse(url=f"/?year={year}&month={month}", status_code=303)
 
 
-# ── Tasks routes ─────────────────────────────────────────────────────────────
 @app.get("/tasks")
 async def tasks_page(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
