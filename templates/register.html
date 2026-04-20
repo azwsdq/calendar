@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="description" content="Регистрация нового аккаунта">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Регистрация — Календарь</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body class="auth-body">
+
+    <main class="auth-card">
+        <div class="auth-logo" aria-label="Календарь">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Календарь</span>
+        </div>
+
+        <h1 class="auth-title">Создать аккаунт</h1>
+
+        {% if error %}
+            <div class="auth-error" role="alert">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <form class="auth-form" action="/register" method="POST" novalidate id="register-form">
+            <div class="auth-field">
+                <label for="email">Email</label>
+                <input id="email" type="email" name="email" placeholder="you@example.com" value="{{ email or '' }}" required autocomplete="email" inputmode="email" autocapitalize="none">
+            </div>
+            <div class="auth-field">
+                <label for="password">Пароль</label>
+                <input id="password" type="password" name="password" placeholder="Минимум 8 символов" required minlength="8" autocomplete="new-password">
+            </div>
+            <div class="auth-field">
+                <label for="password_confirm">Подтверждение пароля</label>
+                <input id="password_confirm" type="password" name="password_confirm" placeholder="Повторите пароль" required autocomplete="new-password">
+                <span class="auth-field-hint" id="confirm-hint" role="status" aria-live="polite"></span>
+            </div>
+            <button type="submit" class="btn-primary auth-submit">Зарегистрироваться</button>
+        </form>
+
+        <p class="auth-switch">
+            Уже есть аккаунт? <a href="/login">Войти</a>
+        </p>
+    </main>
+
+    <script src="{{ url_for('static', path='/main.js') }}" defer></script>
+</body>
+</html>
