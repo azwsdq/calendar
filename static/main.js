@@ -1,141 +1,99 @@
-/**
- * Calendar App - Main JavaScript
- * Все клиентские скрипты вынесены из HTML-шаблонов
- */
 (function() {
     'use strict';
 
-    // ==================== MOBILE MENU ====================
-    function initMobileMenu() {
-        const toggle = document.getElementById('mobileMenuToggle');
-        const overlay = document.getElementById('mobileMenuOverlay');
-        if (!toggle || !overlay) return;
+    // --- Мобильное меню ---
+    window.toggleMobileMenu = function() {
+        const nav = document.getElementById('mobileNav');
+        if (nav) nav.classList.toggle('active');
+    };
+    document.addEventListener('click', function(e) {
+        const nav = document.getElementById('mobileNav');
+        const btn = document.querySelector('.mobile-menu-btn');
+        if (nav && !nav.contains(e.target) && !btn.contains(e.target)) {
+            nav.classList.remove('active');
+        }
+    });
 
-        function closeMenu() {
-            toggle.setAttribute('aria-expanded', 'false');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
+    // --- Модальное окно ---
+    window.openDayModal = function(day) {
+        const modal = document.getElementById('dayModal');
+        const body = document.getElementById('modal-body');
+        const title = document.getElementById('modal-title');
+        const dayEl = document.querySelector(`.day.clickable-day span.day-num`);
+        const days = document.querySelectorAll('.day.clickable-day');
+        let formattedDate = `${day} .04.2026`;
+
+        for (let d of days) {
+            if (d.querySelector('.day-num').textContent == day) {
+                const hiddenSpan = d.querySelector('.hidden-date');
+                if (hiddenSpan) formattedDate = hiddenSpan.textContent;
+                break;
+            }
         }
 
-        toggle.addEventListener('click', () => {
-            const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
-            toggle.setAttribute('aria-expanded', !isExpanded);
-            overlay.classList.toggle('active');
-            document.body.style.overflow = isExpanded ? '' : 'hidden';
-        });
+        const month = document.getElementById('calendar-data').dataset.month;
+        const year = document.querySelector('.month-title').textContent.split(' ')[1];
 
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeMenu();
-        });
+        title.textContent = formattedDate;
 
-        overlay.querySelectorAll('a, button').forEach(el => {
-            el.addEventListener('click', closeMenu);
-        });
+        const contentSrc = document.getElementById('modal-content-' + day);
+        if (contentSrc) {
+            body.innerHTML = contentSrc.innerHTML;
+        } else {
+            body.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-muted)">Нет событий</p>';
+        }
 
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && overlay.classList.contains('active')) closeMenu();
-        });
-    }
+        modal.classList.add('active');
+    };
 
-    // ==================== CALENDAR PAGE ====================
+    window.closeDayModal = function(e) {
+        if (!e || e.target.id === 'dayModal' || e.target.classList.contains('modal-close')) {
+            document.getElementById('dayModal').classList.remove('active');
+        }
+    };
+
+    // --- Задачи ---
+    window.openEdit = function(id) {
+        const card = document.getElementById('task-' + id);
+        if (!card) return;
+        card.querySelector('.task-top-row').style.display = 'none';
+        card.querySelector('.task-meta').style.display = 'none';
+        card.querySelector('.task-card__desc').style.display = 'none';
+        document.getElementById('edit-form-' + id).style.display = 'flex';
+    };
+
+    window.closeEdit = function(id) {
+        const card = document.getElementById('task-' + id);
+        if (!card) return;
+        card.querySelector('.task-top-row').style.display = 'flex';
+        card.querySelector('.task-meta').style.display = 'block';
+        const desc = card.querySelector('.task-card__desc');
+        if(desc) desc.style.display = 'block';
+        document.getElementById('edit-form-' + id).style.display = 'none';
+    };
+
+    // --- Календарь ---
     function initCalendar() {
-        const yearEl = document.getElementById('calendar-year');
-        const monthEl = document.getElementById('calendar-month');
-        if (!yearEl || !monthEl) return;
-
-        const year = parseInt(yearEl.dataset.year, 10);
-        const month = parseInt(monthEl.dataset.month, 10);
         const today = new Date();
+        const yearEl = document.querySelector('.month-title');
+        const yearText = yearEl ? yearEl.textContent.split(' ')[1] : today.getFullYear();
 
-        // Highlight today
-        if (year === today.getFullYear() && month === today.getMonth() + 1) {
+        const month = document.getElementById('calendar-data').dataset.month;
+        const year = parseInt(yearText, 10);
+
+        if (year === today.getFullYear() && month == (today.getMonth() + 1)) {
             document.querySelectorAll('.day .day-num').forEach(el => {
                 if (parseInt(el.textContent, 10) === today.getDate()) {
-                    el.closest('.day')?.classList.add('today');
+                    el.closest('.day').classList.add('today');
                 }
             });
         }
 
-        // Pre-fill date input
         const dateInput = document.querySelector('.add-form input[type="date"]');
-        if (dateInput && !dateInput.value) {
-            dateInput.value = today.toISOString().slice(0, 10);
-        }
+        if (dateInput && !dateInput.value) dateInput.value = today.toISOString().slice(0, 10);
     }
 
-    // ==================== REGISTER PAGE ====================
-    function initRegister() {
-        const form = document.getElementById('register-form');
-        if (!form) return;
-
-        const pw = document.getElementById('password');
-        const confirm = document.getElementById('password_confirm');
-        const hint = document.getElementById('confirm-hint');
-        if (!pw || !confirm || !hint) return;
-
-        function checkMatch() {
-            if (!confirm.value) { hint.textContent = ''; return; }
-            if (pw.value === confirm.value) {
-                hint.textContent = 'Пароли совпадают';
-                hint.className = 'auth-field-hint auth-field-hint--ok';
-            } else {
-                hint.textContent = 'Пароли не совпадают';
-                hint.className = 'auth-field-hint auth-field-hint--err';
-            }
-        }
-
-        confirm.addEventListener('input', checkMatch);
-        pw.addEventListener('input', checkMatch);
-
-        form.addEventListener('submit', (e) => {
-            if (pw.value !== confirm.value) {
-                e.preventDefault();
-                hint.textContent = 'Пароли не совпадают';
-                hint.className = 'auth-field-hint auth-field-hint--err';
-                confirm.focus();
-            } else if (pw.value.length < 8) {
-                e.preventDefault();
-                pw.focus();
-            }
-        });
-    }
-
-    // ==================== TASKS PAGE ====================
-    function initTasks() {
-        // Pre-fill date input
-        const dateInput = document.querySelector('.add-form--tasks input[type="date"]');
-        if (dateInput && !dateInput.value) {
-            dateInput.value = new Date().toISOString().slice(0, 10);
-        }
-
-        // Expose edit functions globally for inline onclick handlers
-        window.openEdit = function(id) {
-            const card = document.getElementById('task-' + id);
-            if (!card) return;
-            card.querySelector('.task-view').style.display = 'none';
-            document.getElementById('edit-form-' + id).style.display = 'flex';
-        };
-
-        window.closeEdit = function(id) {
-            const card = document.getElementById('task-' + id);
-            if (!card) return;
-            card.querySelector('.task-view').style.display = 'flex';
-            document.getElementById('edit-form-' + id).style.display = 'none';
-        };
-
-        // Confirm delete
-        document.querySelectorAll('form[action*="delete"]').forEach(form => {
-            form.addEventListener('submit', (e) => {
-                if (!confirm('Удалить это событие?')) e.preventDefault();
-            });
-        });
-    }
-
-    // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', () => {
-        initMobileMenu();
         initCalendar();
-        initRegister();
-        initTasks();
     });
 })();

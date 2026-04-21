@@ -12,7 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import engine, get_db, Base
-from models import event, User
+from models import Event, User
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
@@ -21,10 +21,8 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-
-# Middleware аутентификации — перенаправляет незалогиненных пользователей на /login
 class AuthMiddleware(BaseHTTPMiddleware):
-    PUBLIC = {"/login", "/register"}
+    PUBLIC = {"/login", "/register", "/static"}
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -34,7 +32,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse(url="/login", status_code=302)
         return await call_next(request)
 
-# SessionMiddleware добавляется после AuthMiddleware — Starlette применяет middleware в обратном порядке
+
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     SessionMiddleware,
@@ -54,15 +52,20 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 @app.get("/register")
 async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request, "error": None})
+    return templates.TemplateResponse(
+        request,
+        "register.html",
+        {"error": None}
+    )
+
 
 @app.post("/register")
 async def register(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    password_confirm: str = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+        password_confirm: str = Form(...),
+        db: Session = Depends(get_db),
 ):
     if password != password_confirm:
         error = "Пароли не совпадают"
@@ -74,9 +77,11 @@ async def register(
         error = None
 
     if error:
-        return templates.TemplateResponse("register.html", {
-            "request": request, "error": error, "email": email,
-        })
+        return templates.TemplateResponse(
+            request,
+            "register.html",
+            {"error": error, "email": email}
+        )
 
     user = User(email=email, hashed_password=hash_password(password))
     db.add(user)
@@ -88,20 +93,27 @@ async def register(
 
 @app.get("/login")
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"error": None}
+    )
+
 
 @app.post("/login")
 async def login(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+        db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
-        return templates.TemplateResponse("login.html", {
-            "request": request, "error": "Неверный email или пароль", "email": email,
-        })
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"error": "Неверный email или пароль", "email": email}
+        )
     request.session["user_id"] = user.id
     return RedirectResponse(url="/", status_code=303)
 
@@ -114,10 +126,10 @@ async def logout(request: Request):
 
 @app.get("/")
 async def calendar_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    year: int = None,
-    month: int = None,
+        request: Request,
+        db: Session = Depends(get_db),
+        year: int = None,
+        month: int = None,
 ):
     now = datetime.now()
     year = year or now.year
@@ -141,23 +153,26 @@ async def calendar_page(
     for item in month_events:
         events_by_day.setdefault(item.date.day, []).append(item)
 
-    return templates.TemplateResponse("calendar.html", {
-        "request": request,
-        "year": year,
-        "month": month,
-        "month_name": month_name,
-        "calendar": month_calendar,
-        "events_by_day": events_by_day,
-    })
+    return templates.TemplateResponse(
+        request,
+        "calendar.html",
+        {
+            "year": year,
+            "month": month,
+            "month_name": month_name,
+            "calendar": month_calendar,
+            "events_by_day": events_by_day,
+        }
+    )
 
 
 @app.post("/add_event")
 async def add_event(
-    request: Request,
-    title: str = Form(...),
-    date: str = Form(...),
-    description: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
+        request: Request,
+        title: str = Form(...),
+        date: str = Form(...),
+        description: Optional[str] = Form(None),
+        db: Session = Depends(get_db),
 ):
     new_event = event(
         title=title,
@@ -173,11 +188,11 @@ async def add_event(
 
 @app.post("/delete_event")
 async def delete_event(
-    request: Request,
-    event_id: int = Form(...),
-    year: int = Form(...),
-    month: int = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        event_id: int = Form(...),
+        year: int = Form(...),
+        month: int = Form(...),
+        db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
     ev = db.query(event).filter(event.id == event_id, event.user_id == user_id).first()
@@ -191,20 +206,24 @@ async def delete_event(
 async def tasks_page(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
     tasks = db.query(event).filter(event.user_id == user_id).order_by(event.date).all()
-    return templates.TemplateResponse("tasks.html", {
-        "request": request,
-        "tasks": tasks,
-        "today": datetime.now().date(),
-    })
+
+    return templates.TemplateResponse(
+        request,
+        "tasks.html",
+        {
+            "tasks": tasks,
+            "today": datetime.now().date(),
+        }
+    )
 
 
 @app.post("/add_task")
 async def add_task(
-    request: Request,
-    title: str = Form(...),
-    description: Optional[str] = Form(None),
-    due_date: str = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        title: str = Form(...),
+        description: Optional[str] = Form(None),
+        due_date: str = Form(...),
+        db: Session = Depends(get_db),
 ):
     new_event = event(
         title=title,
@@ -219,9 +238,9 @@ async def add_task(
 
 @app.post("/delete_task")
 async def delete_task(
-    request: Request,
-    task_id: int = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        task_id: int = Form(...),
+        db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
     task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
@@ -233,12 +252,12 @@ async def delete_task(
 
 @app.post("/edit_task")
 async def edit_task(
-    request: Request,
-    task_id: int = Form(...),
-    title: str = Form(...),
-    description: Optional[str] = Form(None),
-    due_date: str = Form(...),
-    db: Session = Depends(get_db),
+        request: Request,
+        task_id: int = Form(...),
+        title: str = Form(...),
+        description: Optional[str] = Form(None),
+        due_date: str = Form(...),
+        db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
     task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
