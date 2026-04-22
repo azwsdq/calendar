@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ month_name }} {{ year }} — Календарь</title>
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Календарь">
+    <link rel="manifest" href="{{ url_for('static', path='/manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', path='/icon-192.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
@@ -116,5 +122,48 @@
 
     <div id="calendar-data" data-month="{{ month }}" class="visually-hidden"></div>
     <script src="{{ url_for('static', path='/main.js') }}" defer></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register("{{ url_for('static', path='/sw.js') }}")
+                    .then(reg => console.log('[SW] Зарегистрирован:', reg.scope))
+                    .catch(err => console.log('[SW] Ошибка регистрации:', err));
+            });
+        }
+    </script>
+
+    <div id="install-banner" style="display: none; background: var(--primary); color: white; padding: 12px; text-align: center; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;">
+      <p style="margin: 0 0 8px 0; font-size: 14px;">📲 Установите приложение Календарь</p>
+      <button id="install-btn" class="btn-primary" style="background: white; color: var(--primary); margin: 0 4px;">Установить</button>
+      <button id="dismiss-install" style="background: none; border: none; color: white; margin: 0 4px; cursor: pointer;">✕</button>
+    </div>
+
+    <script>
+      let deferredPrompt;
+      const installBanner = document.getElementById('install-banner');
+      const installBtn = document.getElementById('install-btn');
+      const dismissBtn = document.getElementById('dismiss-install');
+
+      window.addEventListener('beforeinstallprompt', e => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBanner.style.display = 'block';
+      });
+
+      installBtn.addEventListener('click', async () => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log(`[PWA] Пользователь выбрал: ${outcome}`);
+          deferredPrompt = null;
+          installBanner.style.display = 'none';
+        }
+      });
+
+      dismissBtn.addEventListener('click', () => {
+        installBanner.style.display = 'none';
+      });
+    </script>
 </body>
 </html>
