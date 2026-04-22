@@ -149,11 +149,9 @@ input, button { font-family: inherit; }
     font-weight: 700;
     color: var(--text);
     margin: 0;
-
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-
     min-width: 0;
     max-width: calc(100% - 80px);
     padding-right: 10px;
@@ -187,6 +185,24 @@ input, button { font-family: inherit; }
 
 .auth-body { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .auth-card { background: var(--surface); width: 100%; max-width: 400px; padding: 32px; border-radius: var(--radius); box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+
+.auth-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 32px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.auth-logo svg {
+    width: 32px;
+    height: 32px;
+    color: var(--primary);
+}
+
 .auth-title { text-align: center; font-size: 24px; margin-bottom: 24px; }
 .auth-error { background: #fef2f2; color: var(--danger); padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-size: 14px; }
 .auth-field { margin-bottom: 16px; }
@@ -213,7 +229,6 @@ input, button { font-family: inherit; }
     .weekday { font-size: 10px; padding: 8px 2px; }
     .day-num { width: 22px; height: 22px; line-height: 22px; font-size: 11px; }
     .event-mini { font-size: 9px; padding: 1px 2px; }
-
 
     .task-top-row { flex-direction: column; align-items: flex-start; gap: 8px; }
     .task-card__title { max-width: 100%; padding-right: 0; white-space: normal; }

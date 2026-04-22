@@ -19,9 +19,8 @@
         const modal = document.getElementById('dayModal');
         const body = document.getElementById('modal-body');
         const title = document.getElementById('modal-title');
-        const dayEl = document.querySelector(`.day.clickable-day span.day-num`);
         const days = document.querySelectorAll('.day.clickable-day');
-        let formattedDate = `${day} .04.2026`;
+        let formattedDate = `${day}.04.2026`;
 
         for (let d of days) {
             if (d.querySelector('.day-num').textContent == day) {
@@ -30,9 +29,6 @@
                 break;
             }
         }
-
-        const month = document.getElementById('calendar-data').dataset.month;
-        const year = document.querySelector('.month-title').textContent.split(' ')[1];
 
         title.textContent = formattedDate;
 
@@ -71,14 +67,13 @@
         if(desc) desc.style.display = 'block';
         document.getElementById('edit-form-' + id).style.display = 'none';
     };
-
-    // --- Календарь ---
     function initCalendar() {
+        const dataEl = document.getElementById('calendar-data');
+        if (!dataEl) return;
         const today = new Date();
         const yearEl = document.querySelector('.month-title');
         const yearText = yearEl ? yearEl.textContent.split(' ')[1] : today.getFullYear();
-
-        const month = document.getElementById('calendar-data').dataset.month;
+        const month = dataEl.dataset.month;
         const year = parseInt(yearText, 10);
 
         if (year === today.getFullYear() && month == (today.getMonth() + 1)) {

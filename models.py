@@ -1,15 +1,13 @@
 from sqlalchemy import Integer, String, Column, Date, ForeignKey
 from database import Base
 
-
 class Event(Base):
     __tablename__ = "events"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     date = Column(Date)
-    description = Column(String, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-
+    description = Column(String, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
 class User(Base):
     __tablename__ = "users"

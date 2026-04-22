@@ -46,6 +46,7 @@ app.add_middleware(
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
+
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
@@ -140,11 +141,11 @@ async def calendar_page(
 
     user_id = request.session.get("user_id")
     month_events = (
-        db.query(event)
+        db.query(Event)
         .filter(
-            event.user_id == user_id,
-            event.date >= datetime(year, month, 1).date(),
-            event.date < datetime(year + (1 if month == 12 else 0), (month % 12) + 1, 1).date(),
+            Event.user_id == user_id,
+            Event.date >= datetime(year, month, 1).date(),
+            Event.date < datetime(year + (1 if month == 12 else 0), (month % 12) + 1, 1).date(),
         )
         .all()
     )
@@ -174,10 +175,10 @@ async def add_event(
         description: Optional[str] = Form(None),
         db: Session = Depends(get_db),
 ):
-    new_event = event(
+    new_event = Event(
         title=title,
         date=datetime.strptime(date, "%Y-%m-%d").date(),
-        description=description,
+        description=description  or "",
         user_id=request.session.get("user_id"),
     )
     db.add(new_event)
@@ -195,7 +196,7 @@ async def delete_event(
         db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
-    ev = db.query(event).filter(event.id == event_id, event.user_id == user_id).first()
+    ev = db.query(Event).filter(Event.id == event_id, Event.user_id == user_id).first()
     if ev:
         db.delete(ev)
         db.commit()
@@ -205,7 +206,7 @@ async def delete_event(
 @app.get("/tasks")
 async def tasks_page(request: Request, db: Session = Depends(get_db)):
     user_id = request.session.get("user_id")
-    tasks = db.query(event).filter(event.user_id == user_id).order_by(event.date).all()
+    tasks = db.query(Event).filter(Event.user_id == user_id).order_by(Event.date).all()
 
     return templates.TemplateResponse(
         request,
@@ -225,9 +226,9 @@ async def add_task(
         due_date: str = Form(...),
         db: Session = Depends(get_db),
 ):
-    new_event = event(
+    new_event = Event(
         title=title,
-        description=description,
+        description=description or "",
         date=datetime.strptime(due_date, "%Y-%m-%d").date(),
         user_id=request.session.get("user_id"),
     )
@@ -243,7 +244,7 @@ async def delete_task(
         db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
-    task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
+    task = db.query(Event).filter(Event.id == task_id, Event.user_id == user_id).first()
     if task:
         db.delete(task)
         db.commit()
@@ -260,7 +261,7 @@ async def edit_task(
         db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
-    task = db.query(event).filter(event.id == task_id, event.user_id == user_id).first()
+    task = db.query(Event).filter(Event.id == task_id, Event.user_id == user_id).first()
     if task:
         task.title = title
         task.description = description
