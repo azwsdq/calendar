@@ -25,6 +25,7 @@
                 <button type="submit" class="nav-logout">Выйти</button>
             </form>
         </nav>
+        <button class="nav-logout" onclick="subscribePush()">🔔 Уведомления</button>
     </header>
 
     <div class="app-container">
@@ -112,6 +113,34 @@
         if (dateInput && !dateInput.value) {
             dateInput.value = today.toISOString().slice(0, 10);
         }
+    </script>
+    <script>
+    const VAPID_PUBLIC_KEY = '{{ vapid_public_key }}';
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = atob(base64);
+        return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+    }
+
+    async function subscribePush() {
+        if (!('serviceWorker' in navigator)) return alert('Браузер не поддерживает SW');
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return alert('Разрешение отклонено');
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+        await fetch('/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(sub),
+            headers: { 'Content-Type': 'application/json' },
+        });
+        alert('Уведомления включены!');
+    }
     </script>
 </body>
 </html>

@@ -2,9 +2,12 @@ from fastapi import FastAPI, Request, Form, Depends
 from typing import Optional
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
+from pywebpush import webpush, WebPushException
+from models import PushSubscription
+import json
 import calendar
 import os
 import bcrypt
@@ -14,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from database import engine, get_db, Base
 from models import event, User
 
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
@@ -21,6 +25,63 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+@app.get("/sw.js")
+async def sw():
+    return FileResponse("static/sw.js")
+
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    user_id = request.session.get("user_id")
+    existing = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == data["endpoint"]
+    ).first()
+    if not existing:
+        sub = PushSubscription(
+            user_id=user_id,
+            endpoint=data["endpoint"],
+            p256dh=data["keys"]["p256dh"],
+            auth=data["keys"]["auth"],
+        )
+        db.add(sub)
+        db.commit()
+    return {"ok": True}
+
+@app.post("/push/send")
+async def push_send(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    subs = db.query(PushSubscription).filter(
+        PushSubscription.user_id == user_id
+    ).all()
+    if not subs:
+        return {"ok": False, "message": "Нет подписчиков"}
+    payload = json.dumps({
+        "title": "Напоминание!",
+        "body": "У вас есть предстоящие события",
+        "url": "/",
+    })
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": "mailto:test@test.com"},
+            )
+        except WebPushException as e:
+            print(f"Ошибка: {e}")
+            if "410" in str(e) or "404" in str(e):
+                db.delete(sub)
+                db.commit()
+    return {"ok": True}
 
 # Middleware аутентификации — перенаправляет незалогиненных пользователей на /login
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -148,6 +209,7 @@ async def calendar_page(
         "month_name": month_name,
         "calendar": month_calendar,
         "events_by_day": events_by_day,
+        "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY"),
     })
 
 

@@ -4,7 +4,8 @@ from pathlib import Path
 
 wp = WebPush(
     private_key=Path("./private_key.pem"),
-    public_key=Path("./public_key.pem")
+    public_key=Path("./public_key.pem"), 
+    subscriber="mailto:jon37047@gmail.com"
 )
 
 # example subscription info
