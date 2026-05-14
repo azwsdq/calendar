@@ -30,7 +30,7 @@ scheduler = AsyncIOScheduler()
 async def start_scheduler():
     scheduler.add_job(
         send_daily_reminders,
-        CronTrigger(hour=9, minute=0),  # каждый день в 09:00
+        CronTrigger(hour=23, minute=30),
     )
     scheduler.start()
 
@@ -93,7 +93,7 @@ async def send_daily_reminders():
 
             body = "Сегодня: " + ", ".join(titles)
             payload = json.dumps({
-                "title": "📅 Напоминание о событиях",
+                "title": "‼️ Скоро дедлайн!!!",
                 "body": body,
                 "url": "/",
             })
