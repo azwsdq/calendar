@@ -17,9 +17,26 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from database import engine, get_db, Base
 from models import event, User
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
+
+scheduler = AsyncIOScheduler()
+
+@app.on_event("startup")
+async def start_scheduler():
+    scheduler.add_job(
+        send_daily_reminders,
+        CronTrigger(hour=9, minute=0),  # каждый день в 09:00
+    )
+    scheduler.start()
+
+@app.on_event("shutdown")
+async def stop_scheduler():
+    scheduler.shutdown()
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -50,6 +67,93 @@ async def push_subscribe(request: Request, db: Session = Depends(get_db)):
         )
         db.add(sub)
         db.commit()
+    return {"ok": True}
+
+async def send_daily_reminders():
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        today = datetime.now().date()
+        
+        # Находим все события на сегодня
+        events_today = db.query(event).filter(event.date == today).all()
+        if not events_today:
+            return
+
+        # Группируем по пользователям
+        user_events = {}
+        for ev in events_today:
+            user_events.setdefault(ev.user_id, []).append(ev.title)
+
+        # Отправляем каждому пользователю
+        for user_id, titles in user_events.items():
+            subs = db.query(PushSubscription).filter(
+                PushSubscription.user_id == user_id
+            ).all()
+
+            body = "Сегодня: " + ", ".join(titles)
+            payload = json.dumps({
+                "title": "📅 Напоминание о событиях",
+                "body": body,
+                "url": "/",
+            })
+
+            for sub in subs:
+                try:
+                    webpush(
+                        subscription_info={
+                            "endpoint": sub.endpoint,
+                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                        },
+                        data=payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims={"sub": "mailto:test@test.com"},
+                    )
+                except WebPushException as e:
+                    print(f"Ошибка: {e}")
+                    if "410" in str(e) or "404" in str(e):
+                        db.delete(sub)
+                        db.commit()
+    finally:
+        db.close()
+
+# @app.post("/push/data_calendar")
+# async def data_calendar(request: Request, db: Session = Depends(get_db)):
+#     user_id = request.session.get("user_id")
+#     subs = db.query(PushSubscription).filter(
+#         PushSubscription.user_id == user_id
+#     ).all()
+
+    
+
+#     if not subs:
+#         return {"ok": False, "message": "Нет подписчиков"}
+#     payload = json.dumps({
+#         "title": "ДАТА!",
+#         "body": "что то там завтра",
+#         "url": "/",
+#     })
+#     for sub in subs:
+#         try:
+#             webpush(
+#                 subscription_info={
+#                     "endpoint": sub.endpoint,
+#                     "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+#                 },
+#                 data=payload,
+#                 vapid_private_key=VAPID_PRIVATE_KEY,
+#                 vapid_claims={"sub": "mailto:test@test.com"},
+#             )
+#         except WebPushException as e:
+#             print(f"Ошибка: {e}")
+#             if "410" in str(e) or "404" in str(e):
+#                 db.delete(sub)
+#                 db.commit()
+#     return {"ok": True}
+
+@app.get("/test-push")
+async def test_push():
+    await send_daily_reminders()
     return {"ok": True}
 
 @app.post("/push/send")
