@@ -15,8 +15,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import engine, get_db, Base
-from models import User
-from models import Event as event
+from models import User, Event 
+# from models import Event as event
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -77,7 +77,7 @@ async def send_daily_reminders():
         today = datetime.now().date()
         
         # Находим все события на сегодня
-        events_today = db.query(event).filter(event.date == today).all()
+        events_today = db.query(Event).filter(Event.date == today).all()
         if not events_today:
             return
 
