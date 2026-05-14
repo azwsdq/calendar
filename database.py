@@ -20,7 +20,7 @@ if not DATABASE_URL:
         raise ValueError("PostgreSQL config is missing. Set DATABASE_URL or DB_USER/DB_PASSWORD/DB_NAME.")
 
     encoded_password = quote_plus(db_password)
-    DATABASE_URL = f"postgresql+psycopg2://{db_user}:{encoded_password}@{db_host}:{db_port}/{db_name}"
+    DATABASE_URL = f"postgresql+psycopg2://{db_name}@{db_host}:{db_port}/{db_name}" # 
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
