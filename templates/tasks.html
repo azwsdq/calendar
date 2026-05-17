@@ -50,9 +50,30 @@
             <h2>Новая задача</h2>
             <form class="add-form add-form--tasks" action="/add_task" method="POST">
                 <input type="text" name="title" placeholder="Название" required>
-                <input type="date" name="due_date" required>
+                <div class="select-wrapper">
+                    <select name="priority" class="priority-select">
+                        <option value="Blocker">Blocker</option>
+                        <option value="Highest">Highest</option>
+                        <option value="High">High</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
                 <input type="text" name="description" placeholder="Описание">
                 <button type="submit" class="btn-primary">+ Добавить</button>
+
+                <!-- Диапазон дат -->
+                <div class="date-range-row">
+                    <div class="date-field">
+                        <input type="date" name="due_date" id="task-date-start" required>
+                        <label for="task-date-start">С</label>
+                    </div>
+                    <span class="date-separator">—</span>
+                    <div class="date-field">
+                        <input type="date" name="due_date_end" id="task-date-end">
+                        <label for="task-date-end">По</label>
+                    </div>
+                </div>
             </form>
         </section>
 
@@ -60,7 +81,7 @@
             {% if tasks %}
                 <div class="task-list">
                     {% for task in tasks %}
-                        <article class="task-card{% if task.date < today %} task-card--overdue{% elif task.date == today %} task-card--today{% endif %}" id="task-{{ task.id }}">
+                        <article class="task-card{% if task.date < today %} task-card--overdue{% elif task.date == today %} task-card--today{% endif %} priority-{{ task.priority|lower if task.priority else 'medium' }}" id="task-{{ task.id }}">
                             <div class="task-top-row">
                                 <h3 class="task-card__title">{{ task.title }}</h3>
                                 <div class="task-actions">
@@ -77,9 +98,20 @@
                             </div>
 
                             <div class="task-meta">
-                                <span class="task-due{% if task.date < today %} task-due--overdue{% elif task.date == today %} task-due--today{% endif %}">
-                                    {{ task.date.strftime('%d.%m.%Y') }}
-                                </span>
+                                {% if task.date_end and task.date_end != task.date %}
+                                    <span class="task-due task-due-range">
+                                        {{ task.date.strftime('%d.%m.%Y') }} — {{ task.date_end.strftime('%d.%m.%Y') }}
+                                    </span>
+                                {% else %}
+                                    <span class="task-due{% if task.date < today %} task-due--overdue{% elif task.date == today %} task-due--today{% endif %}">
+                                        {{ task.date.strftime('%d.%m.%Y') }}
+                                    </span>
+                                {% endif %}
+                                {% if task.priority %}
+                                    <span class="priority-badge priority-{{ task.priority|lower }}">
+                                        {{ task.priority }}
+                                    </span>
+                                {% endif %}
                             </div>
 
                             {% if task.description %}
@@ -90,9 +122,31 @@
                                 <input type="hidden" name="task_id" value="{{ task.id }}">
                                 <div class="task-edit-fields">
                                     <input type="text" name="title" value="{{ task.title }}" required>
-                                    <input type="date" name="due_date" value="{{ task.date.strftime('%Y-%m-%d') }}" required>
+                                    <div class="select-wrapper" style="flex: 0 1 140px;">
+                                        <select name="priority" class="priority-select">
+                                            <option value="Blocker" {% if task.priority == 'Blocker' %}selected{% endif %}>Blocker</option>
+                                            <option value="Highest" {% if task.priority == 'Highest' %}selected{% endif %}>Highest</option>
+                                            <option value="High" {% if task.priority == 'High' %}selected{% endif %}>High</option>
+                                            <option value="Medium" {% if task.priority == 'Medium' or not task.priority %}selected{% endif %}>Medium</option>
+                                            <option value="Low" {% if task.priority == 'Low' %}selected{% endif %}>Low</option>
+                                        </select>
+                                    </div>
                                     <input type="text" name="description" value="{{ task.description or '' }}">
                                 </div>
+
+                                <!-- Диапазон дат в режиме редактирования -->
+                                <div class="task-edit-date-range">
+                                    <div class="date-field">
+                                        <input type="date" name="due_date" value="{{ task.date.strftime('%Y-%m-%d') }}" required>
+                                        <label>С</label>
+                                    </div>
+                                    <span class="date-separator">—</span>
+                                    <div class="date-field">
+                                        <input type="date" name="due_date_end" value="{{ task.date_end.strftime('%Y-%m-%d') if task.date_end else '' }}">
+                                        <label>По</label>
+                                    </div>
+                                </div>
+
                                 <div class="task-edit-actions">
                                     <button type="submit" class="btn-primary btn-small">Сохранить</button>
                                     <button type="button" class="btn-cancel btn-small" onclick="closeEdit({{ task.id }})">Отмена</button>
@@ -151,6 +205,15 @@
 
       dismissBtn.addEventListener('click', () => {
         installBanner.style.display = 'none';
+      });
+
+      // Установка сегодняшней даты по умолчанию
+      document.addEventListener('DOMContentLoaded', function() {
+        const today = new Date().toISOString().slice(0, 10);
+        const dateStartInput = document.getElementById('task-date-start');
+        if (dateStartInput && !dateStartInput.value) {
+            dateStartInput.value = today;
+        }
       });
     </script>
 </body>

@@ -5,8 +5,10 @@ class Event(Base):
     __tablename__ = "events"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    date = Column(Date)
+    date = Column(Date)  # Начало периода
+    date_end = Column(Date, nullable=True)  # Конец периода (опционально)
     description = Column(String, nullable=True)
+    priority = Column(String, default="Medium")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
 class User(Base):

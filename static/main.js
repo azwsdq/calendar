@@ -96,8 +96,10 @@
             });
         }
 
-        const dateInput = document.querySelector('.add-form input[type="date"]');
-        if (dateInput && !dateInput.value) dateInput.value = today.toISOString().slice(0, 10);
+        const dateStartInput = document.querySelector('#date-start');
+        if (dateStartInput && !dateStartInput.value) {
+            dateStartInput.value = today.toISOString().slice(0, 10);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

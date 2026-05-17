@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 import calendar
 import os
 import bcrypt
@@ -140,19 +140,38 @@ async def calendar_page(
     month_name = calendar.month_name[month]
 
     user_id = request.session.get("user_id")
-    month_events = (
-        db.query(Event)
-        .filter(
-            Event.user_id == user_id,
-            Event.date >= datetime(year, month, 1).date(),
-            Event.date < datetime(year + (1 if month == 12 else 0), (month % 12) + 1, 1).date(),
-        )
-        .all()
-    )
+
+    # Получаем все события пользователя
+    all_events = db.query(Event).filter(Event.user_id == user_id).all()
+
+    # Фильтруем события, которые попадают в текущий месяц
+    month_start = datetime(year, month, 1).date()
+    if month == 12:
+        month_end = datetime(year + 1, 1, 1).date()
+    else:
+        month_end = datetime(year, month + 1, 1).date()
 
     events_by_day = {}
-    for item in month_events:
-        events_by_day.setdefault(item.date.day, []).append(item)
+
+    for event in all_events:
+        # Определяем диапазон дат события
+        event_start = event.date
+        event_end = event.date_end if event.date_end else event_start
+
+        # Проверяем, пересекается ли событие с текущим месяцем
+        if event_start < month_end and event_end >= month_start:
+            # Для каждого дня в диапазоне события
+            current_date = event_start
+            while current_date <= event_end:
+                # Если день в текущем месяце
+                if current_date.year == year and current_date.month == month:
+                    day = current_date.day
+                    if day not in events_by_day:
+                        events_by_day[day] = []
+                    # Добавляем событие, если его еще нет для этого дня
+                    if not any(e.id == event.id for e in events_by_day[day]):
+                        events_by_day[day].append(event)
+                current_date += timedelta(days=1)
 
     return templates.TemplateResponse(
         request,
@@ -172,13 +191,26 @@ async def add_event(
         request: Request,
         title: str = Form(...),
         date: str = Form(...),
+        date_end: str = Form(None),
         description: Optional[str] = Form(None),
+        priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
+    start_date = datetime.strptime(date, "%Y-%m-%d").date()
+
+    if not date_end or date_end.strip() == "" or date_end == date:
+        end_date = None
+    else:
+        end_date = datetime.strptime(date_end, "%Y-%m-%d").date()
+        if end_date < start_date:
+            end_date = None
+
     new_event = Event(
         title=title,
-        date=datetime.strptime(date, "%Y-%m-%d").date(),
-        description=description  or "",
+        date=start_date,
+        date_end=end_date,
+        description=description or "",  # <-- FIX: всегда строка
+        priority=priority,
         user_id=request.session.get("user_id"),
     )
     db.add(new_event)
@@ -224,12 +256,25 @@ async def add_task(
         title: str = Form(...),
         description: Optional[str] = Form(None),
         due_date: str = Form(...),
+        due_date_end: str = Form(None),
+        priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
+    start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+
+    if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
+        end_date = None
+    else:
+        end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
+        if end_date < start_date:
+            end_date = None
+
     new_event = Event(
         title=title,
         description=description or "",
-        date=datetime.strptime(due_date, "%Y-%m-%d").date(),
+        date=start_date,
+        date_end=end_date,
+        priority=priority,
         user_id=request.session.get("user_id"),
     )
     db.add(new_event)
@@ -258,14 +303,28 @@ async def edit_task(
         title: str = Form(...),
         description: Optional[str] = Form(None),
         due_date: str = Form(...),
+        due_date_end: str = Form(None),
+        priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
     user_id = request.session.get("user_id")
     task = db.query(Event).filter(Event.id == task_id, Event.user_id == user_id).first()
     if task:
         task.title = title
-        task.description = description
+        task.description = description or ""
         task.date = datetime.strptime(due_date, "%Y-%m-%d").date()
+
+        if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
+            task.date_end = None
+        else:
+            end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
+            start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+            if end_date >= start_date:
+                task.date_end = end_date
+            else:
+                task.date_end = None
+
+        task.priority = priority
         db.commit()
     return RedirectResponse(url="/tasks", status_code=303)
 

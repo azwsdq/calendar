@@ -14,68 +14,6 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', path='/icon-192.png') }}">
 
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
-    <style>
-        /* Стили для секции спонсоров */
-        .sponsors-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 60px 20px;
-            margin-top: 60px;
-        }
-
-        .sponsors-title {
-            text-align: center;
-            color: white;
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 40px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-
-        .sponsors-title u {
-            text-decoration: underline;
-        }
-
-        .sponsors-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 30px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .sponsor-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
-        }
-
-        .sponsor-card:hover {
-            transform: translateY(-10px);
-        }
-
-        .sponsor-photo {
-            width: 100%;
-            height: 400px;
-            object-fit: cover;
-            object-position: center top;
-            display: block;
-            background: #f0f0f0;
-        }
-
-        @media (max-width: 768px) {
-            .sponsors-section {
-                padding: 40px 15px;
-            }
-            .sponsors-title {
-                font-size: 24px;
-            }
-            .sponsor-photo {
-                height: 300px;
-            }
-        }
-    </style>
 </head>
 <body>
     <header class="app-header">
@@ -123,9 +61,29 @@
             <h2>Новое событие</h2>
             <form class="add-form" action="/add_event" method="POST">
                 <input type="text" name="title" placeholder="Название" required>
-                <input type="date" name="date" required>
+                <div class="select-wrapper">
+                    <select name="priority" class="priority-select">
+                        <option value="Blocker">Blocker</option>
+                        <option value="Highest">Highest</option>
+                        <option value="High">High</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
                 <input type="text" name="description" placeholder="Описание">
                 <button type="submit" class="btn-primary">+ Добавить</button>
+
+                <div class="date-range-row">
+                    <div class="date-field">
+                        <input type="date" name="date" id="date-start" required>
+                        <label for="date-start">С</label>
+                    </div>
+                    <span class="date-separator">—</span>
+                    <div class="date-field">
+                        <input type="date" name="date_end" id="date-end">
+                        <label for="date-end">По</label>
+                    </div>
+                </div>
             </form>
         </section>
 
@@ -146,7 +104,7 @@
                                 <span class="day-num">{{day}}</span>
                                 <div class="day-events-mini">
                                     {% for e in events_by_day.get(day, []) %}
-                                        <div class="event-mini" title="{{ e.title }}">
+                                        <div class="event-mini priority-{{ e.priority|lower }}" title="{{ e.title }}">
                                             {{ e.title[:6] }}{% if e.title|length > 6 %}...{% endif %}
                                         </div>
                                     {% endfor %}
@@ -197,95 +155,6 @@
         </div>
     </section>
 
-    <style>
-        .sponsors-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 60px 20px;
-            margin-top: 60px;
-        }
-
-        .sponsors-title {
-            text-align: center;
-            color: white;
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 40px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-
-        .sponsors-title u {
-            text-decoration: underline;
-        }
-
-        .sponsors-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 30px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .sponsor-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
-        }
-
-        .sponsor-card:hover {
-            transform: translateY(-10px);
-        }
-
-        .sponsor-photo {
-            width: 100%;
-            height: 400px;
-            object-fit: cover;
-            object-position: center top;
-            display: block;
-            background: #f0f0f0;
-        }
-
-        .sponsor-info {
-            padding: 20px;
-            text-align: center;
-            background: #f8f9fa;
-        }
-
-        .sponsor-role {
-            font-size: 16px;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .sponsor-name {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1a1a1a;
-        }
-
-        @media (max-width: 768px) {
-            .sponsors-section {
-                padding: 40px 15px;
-            }
-            .sponsors-title {
-                font-size: 24px;
-            }
-            .sponsor-photo {
-                height: 300px;
-            }
-            .sponsor-role {
-                font-size: 14px;
-            }
-            .sponsor-name {
-                font-size: 16px;
-            }
-        }
-    </style>
-
     <div class="modal-overlay" id="dayModal" onclick="closeDayModal(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
             <div class="modal-header">
@@ -301,8 +170,16 @@
             <div id="modal-content-{{ day }}">
                 {% if evts %}
                     {% for e in evts %}
-                        <div class="modal-event-item">
+                        <div class="modal-event-item priority-{{ e.priority|lower }}">
+                            <div class="priority-badge priority-{{ e.priority|lower }}">
+                                {{ e.priority }}
+                            </div>
                             <h4>{{ e.title }}</h4>
+                            {% if e.date_end and e.date_end != e.date %}
+                                <p class="event-date-range">{{ e.date.strftime('%d.%m.%Y') }} — {{ e.date_end.strftime('%d.%m.%Y') }}</p>
+                            {% else %}
+                                <p class="event-date">{{ e.date.strftime('%d.%m.%Y') }}</p>
+                            {% endif %}
                             <p>{{ e.description or 'Нет описания' }}</p>
                         </div>
                     {% endfor %}
