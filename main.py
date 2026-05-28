@@ -147,9 +147,9 @@ async def send_hourly_reminders():
                             vapid_private_key=VAPID_PRIVATE_KEY,
                             vapid_claims={"sub": "mailto:test@test.com"},
                         )
-                        print(f"[HOURLY] ✅ Push отправлен: {push_title}")
+                        print(f"[HOURLY]  Push отправлен: {push_title}")
                     except WebPushException as e:
-                        print(f"[HOURLY] ❌ Ошибка push: {e}")
+                        print(f"[HOURLY]  Ошибка push: {e}")
                         if "410" in str(e) or "404" in str(e) or "400" in str(e):
                             db.delete(sub)
                             db.commit()
