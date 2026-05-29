@@ -52,21 +52,33 @@
     window.openEdit = function(id) {
         const card = document.getElementById('task-' + id);
         if (!card) return;
-        card.querySelector('.task-top-row').style.display = 'none';
-        card.querySelector('.task-meta').style.display = 'none';
-        card.querySelector('.task-card__desc').style.display = 'none';
-        document.getElementById('edit-form-' + id).style.display = 'flex';
+
+        const topRow = card.querySelector('.task-top-row');
+        const meta = card.querySelector('.task-meta');
+        const desc = card.querySelector('.task-card__desc');
+        const form = document.getElementById('edit-form-' + id);
+
+        if (topRow) topRow.style.display = 'none';
+        if (meta) meta.style.display = 'none';
+        if (desc) desc.style.display = 'none';
+        if (form) form.style.display = 'flex';
     };
 
     window.closeEdit = function(id) {
         const card = document.getElementById('task-' + id);
         if (!card) return;
-        card.querySelector('.task-top-row').style.display = 'flex';
-        card.querySelector('.task-meta').style.display = 'block';
+
+        const topRow = card.querySelector('.task-top-row');
+        const meta = card.querySelector('.task-meta');
         const desc = card.querySelector('.task-card__desc');
-        if(desc) desc.style.display = 'block';
-        document.getElementById('edit-form-' + id).style.display = 'none';
+        const form = document.getElementById('edit-form-' + id);
+
+        if (topRow) topRow.style.display = 'flex';
+        if (meta) meta.style.display = 'block';
+        if (desc) desc.style.display = 'block';
+        if (form) form.style.display = 'none';
     };
+
     function initCalendar() {
         const dataEl = document.getElementById('calendar-data');
         if (!dataEl) return;
@@ -84,8 +96,10 @@
             });
         }
 
-        const dateInput = document.querySelector('.add-form input[type="date"]');
-        if (dateInput && !dateInput.value) dateInput.value = today.toISOString().slice(0, 10);
+        const dateStartInput = document.querySelector('#date-start');
+        if (dateStartInput && !dateStartInput.value) {
+            dateStartInput.value = today.toISOString().slice(0, 10);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

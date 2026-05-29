@@ -65,13 +65,23 @@ self.addEventListener('push', event => {
     self.registration.showNotification('Календарь', options)
   );
 });
+
 self.addEventListener('push', (event) => {
-    const data = event.data.json();
+    let data = { title: 'Календарь', body: 'Новое уведомление', url: '/' };
+    try {
+        data = event.data.json();
+    } catch (e) {
+        data.body = event.data ? event.data.text() : data.body;
+    }
+
     event.waitUntil(
         self.registration.showNotification(data.title, {
             body: data.body,
+            icon: '/static/icon-192.png',
+            badge: '/static/icon-192.png',
+            vibrate: [100, 50, 100],
             requireInteraction: true,
-            icon: '/static/icon-512.png',
+            data: { url: data.url || '/' },
         })
     );
 });
