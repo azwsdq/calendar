@@ -15,6 +15,285 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from database import engine, get_db, Base
 from models import Event, User
 
+
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+
+Base.metadata.create_all(bind=engine)
+app = FastAPI()
+
+scheduler = AsyncIOScheduler()
+
+# Запуск планировщика
+@app.on_event("startup")
+async def start_scheduler():
+    # Ежедневные — за 7, 3, 1 день
+    scheduler.add_job(
+        send_daily_reminders,
+        CronTrigger(hour=9, minute=0),
+    )
+    # Внутридневные — за 3ч и 1ч (запускается каждый час, сама разбирается)
+    scheduler.add_job(
+        send_hourly_reminders,
+        CronTrigger(minute=0),   # каждый час в :00
+    )
+    scheduler.start()
+
+@app.on_event("shutdown")
+async def stop_scheduler():
+    scheduler.shutdown()
+
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/sw.js")
+async def sw():
+    return FileResponse("static/sw.js")
+
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    user_id = request.session.get("user_id")
+    existing = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == data["endpoint"]
+    ).first()
+    if not existing:
+        sub = PushSubscription(
+            user_id=user_id,
+            endpoint=data["endpoint"],
+            p256dh=data["keys"]["p256dh"],
+            auth=data["keys"]["auth"],
+        )
+        db.add(sub)
+        db.commit()
+    return {"ok": True}
+
+async def send_hourly_reminders():
+    from database import SessionLocal
+    from sqlalchemy import or_, and_
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        today = now.date()
+        current_hour = now.hour
+
+        print(f"[HOURLY] Запуск: {now}, час: {current_hour}")
+
+        events = db.query(Event).filter(
+            or_(
+                Event.date_end == today,
+                and_(Event.date_end == None, Event.date == today),
+            ),
+            Event.deadline_time != None,
+        ).all()
+
+        print(f"[HOURLY] Найдено событий с дедлайном сегодня и временем: {len(events)}")
+        for ev in events:
+            print(f"[HOURLY] Событие: '{ev.title}', deadline_time: {ev.deadline_time}, hours_left: {ev.deadline_time.hour - current_hour}")
+
+        if not events:
+            print("[HOURLY] Нет событий — выход")
+            return
+
+        notify = []
+        for ev in events:
+            deadline_hour = ev.deadline_time.hour
+            hours_left = deadline_hour - current_hour
+
+            if hours_left == 3:
+                notify.append((ev, "До дедлайна 3 часа!", "Осталось 3 часа"))
+            elif hours_left == 1:
+                notify.append((ev, "До дедлайна 1 час!", "Остался 1 час"))
+
+        print(f"[HOURLY] К отправке: {len(notify)}")
+
+        user_events = {}
+        for ev, title, label in notify:
+            user_events.setdefault(ev.user_id, []).append((title, label, ev.title))
+
+        for user_id, items in user_events.items():
+            subs = db.query(PushSubscription).filter(
+                PushSubscription.user_id == user_id
+            ).all()
+            print(f"[HOURLY] Пользователь {user_id}, подписок: {len(subs)}")
+
+            for push_title, label, event_title in items:
+                payload = json.dumps({
+                    "title": push_title,
+                    "body": f"{label}: {event_title}",
+                    "url": "/tasks",
+                })
+                for sub in subs:
+                    try:
+                        webpush(
+                            subscription_info={
+                                "endpoint": sub.endpoint,
+                                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                            },
+                            data=payload,
+                            vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims={"sub": "mailto:test@test.com"},
+                        )
+                        print(f"[HOURLY]  Push отправлен: {push_title}")
+                    except WebPushException as e:
+                        print(f"[HOURLY]  Ошибка push: {e}")
+                        if "410" in str(e) or "404" in str(e) or "400" in str(e):
+                            db.delete(sub)
+                            db.commit()
+    finally:
+        db.close()
+
+async def send_daily_reminders():
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        today = datetime.now().date()
+
+        # Дни, за которые уведомляем (0 = сегодня дедлайн)
+        notify_offsets = {
+            0: ("Дедлайн сегодня!", "Срок истекает сегодня"),
+            1: ("Завтра дедлайн!", "Остался 1 день"),
+            3: ("До дедлайна 3 дня", "Осталось 3 дня"),
+            7: ("До дедлайна неделя", "Осталось 7 дней"),
+        }
+
+        for offset, (title, label) in notify_offsets.items():
+            target_date = today + timedelta(days=offset)
+
+            # Ищем события, у которых date_end == target_date
+            # или date == target_date (если date_end не задан)
+            from sqlalchemy import or_, and_
+            events = db.query(Event).filter(
+                or_(
+                    and_(Event.date_end == target_date),
+                    and_(Event.date_end == None, Event.date == target_date),
+                )
+            ).all()
+
+            if not events:
+                continue
+
+            # Группируем по пользователям
+            user_events = {}
+            for ev in events:
+                user_events.setdefault(ev.user_id, []).append(ev.title)
+
+            for user_id, titles in user_events.items():
+                subs = db.query(PushSubscription).filter(
+                    PushSubscription.user_id == user_id
+                ).all()
+
+                body = f"{label}: " + ", ".join(titles)
+                payload = json.dumps({
+                    "title": title,
+                    "body": body,
+                    "url": "/tasks",
+                })
+
+                for sub in subs:
+                    try:
+                        webpush(
+                            subscription_info={
+                                "endpoint": sub.endpoint,
+                                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                            },
+                            data=payload,
+                            vapid_private_key=VAPID_PRIVATE_KEY,
+                            vapid_claims={"sub": "mailto:test@test.com"},
+                        )
+                    except WebPushException as e:
+                        print(f"Ошибка push: {e}")
+                        if "410" in str(e) or "404" in str(e) or "400" in str(e):
+                            db.delete(sub)
+                            db.commit()
+    finally:
+        db.close()
+@app.get("/test-push-hourly")
+async def test_push_hourly():
+    await send_hourly_reminders()
+    return {"ok": True}
+
+@app.get("/test-push")
+async def test_push():
+    await send_daily_reminders()
+    return {"ok": True}
+
+@app.post("/push/send")
+async def push_send(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    subs = db.query(PushSubscription).filter(
+        PushSubscription.user_id == user_id
+    ).all()
+    if not subs:
+        return {"ok": False, "message": "Нет подписчиков"}
+    payload = json.dumps({
+        "title": "Напоминание!",
+        "body": "У вас есть предстоящие события",
+        "url": "/",
+    })
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": "mailto:test@test.com"},
+            )
+        except WebPushException as e:
+            print(f"Ошибка: {e}")
+            if "410" in str(e) or "404" in str(e) or "400" in str(e):
+                db.delete(sub)
+                db.commit()
+    return {"ok": True}
+
+@app.get("/test-push-now")
+async def test_push_now(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    subs = db.query(PushSubscription).filter(
+        PushSubscription.user_id == user_id
+    ).all()
+
+    print(f"[TEST] Подписок найдено: {len(subs)}")
+
+    if not subs:
+        return {"ok": False, "message": "Нет подписок — сначала нажми кнопку Уведомления на главной"}
+
+    payload = json.dumps({
+        "title": "Тест уведомления",
+        "body": "Уведомления работают!",
+        "url": "/tasks",
+    })
+
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": "mailto:test@test.com"},
+            )
+            print(f"[TEST] Push отправлен")
+        except WebPushException as e:
+            print(f"[TEST] Ошибка: {e}")
+
+    return {"ok": True}
+
+
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
@@ -175,14 +454,15 @@ async def calendar_page(
                 current_date += timedelta(days=1)
 
     return templates.TemplateResponse(
-        request,
         "calendar.html",
         {
+            "request": request,
             "year": year,
             "month": month,
             "month_name": month_name,
             "calendar": month_calendar,
             "events_by_day": events_by_day,
+            "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY"),
         }
     )
 
