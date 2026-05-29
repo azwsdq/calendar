@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ month_name }} {{ year }} — Календарь</title>
-
     <!-- PWA Meta -->
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +11,6 @@
     <meta name="apple-mobile-web-app-title" content="Календарь">
     <link rel="manifest" href="{{ url_for('static', path='/manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', path='/icon-192.png') }}">
-
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
@@ -29,6 +27,8 @@
         <nav class="header-nav">
             <a href="/" class="nav-link nav-link--active">Календарь</a>
             <a href="/tasks" class="nav-link">Задачи</a>
+            <a href="/about" class="nav-link">О проекте</a>
+            <button class="nav-logout" onclick="subscribePush()">Уведомления</button>
             <form action="/logout" method="POST"><button type="submit" class="nav-logout">Выйти</button></form>
         </nav>
     </header>
@@ -36,6 +36,7 @@
     <div class="mobile-nav-dropdown" id="mobileNav">
         <a href="/" class="nav-link nav-link--active">Календарь</a>
         <a href="/tasks" class="nav-link">Задачи</a>
+        <a href="/about" class="nav-link">О проекте</a>
         <form action="/logout" method="POST"><button type="submit" class="nav-logout" style="width:100%">Выйти</button></form>
     </div>
 
@@ -56,7 +57,7 @@
         </div>
 
         <section class="add-form-card">
-            <h2>Новое событие</h2>
+            <h2>НОВОЕ СОБЫТИЕ</h2>
             <form class="add-form" action="/add_event" method="POST">
                 <input type="text" name="title" placeholder="Название" required>
                 <div class="select-wrapper">
@@ -72,6 +73,10 @@
                 <button type="submit" class="btn-primary">+ Добавить</button>
 
                 <div class="date-range-row">
+                    <div class="date-field" style="margin-top: 8px;">
+                        <input type="time" name="deadline_time" id="deadline-time">
+                        <label for="deadline-time">Время дедлайна</label>
+                    </div>
                     <div class="date-field">
                         <input type="date" name="date" id="date-start" required>
                         <label for="date-start">С</label>
@@ -99,7 +104,7 @@
                             {% set full_date = day_str ~ "." ~ month_str ~ "." ~ year %}
 
                             <div class="day clickable-day" onclick="openDayModal({{ day }})">
-                                <span class="day-num">{{day}}</span>
+                                <span class="day-num">{{ day }}</span>
                                 <div class="day-events-mini">
                                     {% for e in events_by_day.get(day, []) %}
                                         <div class="event-mini priority-{{ e.priority|lower }}" title="{{ e.title }}">
@@ -115,43 +120,6 @@
             </div>
         </section>
     </main>
-
-    <!-- Секция спонсоров -->
-    <section class="sponsors-section">
-        <h2 class="sponsors-title">Наша команда <u>проекта</u></h2>
-        <div class="sponsors-grid">
-            <div class="sponsor-card">
-                <img src="\static\v.png"
-                     alt="Backend Developer"
-                     class="sponsor-photo"
-                     onerror="this.onerror=null; this.src='/static/v.png';">
-                <div class="sponsor-info">
-                    <div class="sponsor-role">Backend Developer</div>
-                    <div class="sponsor-name">Куруц Владимир</div>
-                </div>
-            </div>
-            <div class="sponsor-card">
-                <img src="\static\m.png"
-                     alt="Team Lead"
-                     class="sponsor-photo"
-                     onerror="this.onerror=null; this.src='/static/m.png';">
-                <div class="sponsor-info">
-                    <div class="sponsor-role">Team Lead</div>
-                    <div class="sponsor-name">Ирошников Михаил</div>
-                </div>
-            </div>
-            <div class="sponsor-card">
-                <img src="\static\s.png"
-                     alt="Frontend Developer"
-                     class="sponsor-photo"
-                     onerror="this.onerror=null; this.src='/static/s.png';">
-                <div class="sponsor-info">
-                    <div class="sponsor-role">Frontend Developer</div>
-                    <div class="sponsor-name">Николаев Александр</div>
-                </div>
-            </div>
-        </div>
-    </section>
 
     <div class="modal-overlay" id="dayModal" onclick="closeDayModal(event)">
         <div class="modal-content" onclick="event.stopPropagation()">
@@ -178,6 +146,9 @@
                             {% else %}
                                 <p class="event-date">{{ e.date.strftime('%d.%m.%Y') }}</p>
                             {% endif %}
+                            {% if e.deadline_time %}
+                                <p style="color: var(--text-muted); font-size: 13px;">⏳ Дедлайн в {{ e.deadline_time.strftime('%H:%M') }}</p>
+                            {% endif %}
                             <p>{{ e.description or 'Нет описания' }}</p>
                         </div>
                     {% endfor %}
@@ -189,7 +160,6 @@
     </div>
 
     <div id="calendar-data" data-month="{{ month }}" class="visually-hidden"></div>
-
     <script src="{{ url_for('static', path='/main.js') }}" defer></script>
 
     <!-- Service Worker -->
@@ -235,6 +205,34 @@
       dismissBtn.addEventListener('click', () => {
         installBanner.style.display = 'none';
       });
+    </script>
+    <script>
+    const VAPID_PUBLIC_KEY = '{{ vapid_public_key }}';
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = atob(base64);
+        return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+    }
+
+    async function subscribePush() {
+        if (!('serviceWorker' in navigator)) return alert('Браузер не поддерживает SW');
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return alert('Разрешение отклонено');
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+        await fetch('/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(sub),
+            headers: { 'Content-Type': 'application/json' },
+        });
+        alert('Уведомления включены!');
+    }
     </script>
 </body>
 </html>

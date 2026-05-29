@@ -62,6 +62,10 @@
 
                 <!-- Диапазон дат -->
                 <div class="date-range-row">
+                    <div class="date-field" style="margin-top: 8px;">
+                        <input type="time" name="deadline_time" id="deadline-time">
+                        <label for="deadline-time">Время дедлайна</label>
+                    </div>
                     <div class="date-field">
                         <input type="date" name="due_date" id="task-date-start" required>
                         <label for="task-date-start">С</label>
@@ -105,6 +109,11 @@
                                         {{ task.date.strftime('%d.%m.%Y') }}
                                     </span>
                                 {% endif %}
+                                {% if task.deadline_time %}
+                                    <span class="task-due" style="color: var(--text-muted);">
+                                        ⏳ {{ task.deadline_time.strftime('%H:%M') }}
+                                    </span>
+                                {% endif %}
                                 {% if task.priority %}
                                     <span class="priority-badge priority-{{ task.priority|lower }}">
                                         {{ task.priority }}
@@ -144,7 +153,10 @@
                                         <label>По</label>
                                     </div>
                                 </div>
-
+                                <div class="date-field" style="margin-top: 8px;">
+                                    <input type="time" name="deadline_time" value="{{ task.deadline_time.strftime('%H:%M') if task.deadline_time else '' }}">
+                                    <label>Время дедлайна</label>
+                                </div>
                                 <div class="task-edit-actions">
                                     <button type="submit" class="btn-primary btn-small">Сохранить</button>
                                     <button type="button" class="btn-cancel btn-small" onclick="closeEdit({{ task.id }})">Отмена</button>
