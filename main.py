@@ -163,7 +163,6 @@ async def send_daily_reminders():
     try:
         today = datetime.now().date()
 
-        # Дни, за которые уведомляем (0 = сегодня дедлайн)
         notify_offsets = {
             0: ("Дедлайн сегодня!", "Срок истекает сегодня"),
             1: ("Завтра дедлайн!", "Остался 1 день"),
@@ -187,7 +186,6 @@ async def send_daily_reminders():
             if not events:
                 continue
 
-            # Группируем по пользователям
             user_events = {}
             for ev in events:
                 user_events.setdefault(ev.user_id, []).append(ev.title)
@@ -354,17 +352,14 @@ async def send_daily_reminders():
     try:
         today = datetime.now().date()
 
-        # Находим все события на сегодня
         events_today = db.query(Event).filter(Event.date == today).all()
         if not events_today:
             return
 
-        # Группируем по пользователям
         user_events = {}
         for ev in events_today:
             user_events.setdefault(ev.user_id, []).append(ev.title)
 
-        # Отправляем каждому пользователю
         for user_id, titles in user_events.items():
             subs = db.query(PushSubscription).filter(
                 PushSubscription.user_id == user_id
@@ -554,10 +549,8 @@ async def calendar_page(
 
     user_id = request.session.get("user_id")
 
-    # Получаем все события пользователя
     all_events = db.query(Event).filter(Event.user_id == user_id).all()
 
-    # Фильтруем события, которые попадают в текущий месяц
     month_start = datetime(year, month, 1).date()
     if month == 12:
         month_end = datetime(year + 1, 1, 1).date()
@@ -567,21 +560,16 @@ async def calendar_page(
     events_by_day = {}
 
     for event in all_events:
-        # Определяем диапазон дат события
         event_start = event.date
         event_end = event.date_end if event.date_end else event_start
 
-        # Проверяем, пересекается ли событие с текущим месяцем
         if event_start < month_end and event_end >= month_start:
-            # Для каждого дня в диапазоне события
             current_date = event_start
             while current_date <= event_end:
-                # Если день в текущем месяце
                 if current_date.year == year and current_date.month == month:
                     day = current_date.day
                     if day not in events_by_day:
                         events_by_day[day] = []
-                    # Добавляем событие, если его еще нет для этого дня
                     if not any(e.id == event.id for e in events_by_day[day]):
                         events_by_day[day].append(event)
                 current_date += timedelta(days=1)
@@ -630,7 +618,7 @@ async def add_event(
         date=start_date,
         date_end=end_date,
         deadline_time=parsed_time,
-        description=description or "",  # <-- FIX: всегда строка
+        description=description or "",
         priority=priority,
         user_id=request.session.get("user_id"),
     )
