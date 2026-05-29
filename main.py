@@ -16,7 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import engine, get_db, Base
 from models import User, Event, PushSubscription
-# from models import Event as event
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
