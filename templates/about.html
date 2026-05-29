@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>О проекте — Календарь</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <style>
+        .about-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .about-title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 20px;
+        }
+
+        .about-subtitle {
+            text-align: center;
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 60px;
+        }
+
+        .about-section {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .about-section h2 {
+            font-size: 24px;
+            color: var(--primary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid var(--primary-light);
+        }
+
+        .about-section p {
+            font-size: 16px;
+            line-height: 1.8;
+            color: var(--text);
+            margin-bottom: 15px;
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .team-card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            transition: transform 0.3s ease;
+            text-align: center;
+        }
+
+        .team-card:hover {
+            transform: translateY(-10px);
+        }
+
+        .team-photo {
+            width: 100%;
+            height: 350px;
+            object-fit: cover;
+            object-position: center top;
+            background: #f0f0f0;
+        }
+
+        .team-info {
+            padding: 25px;
+            background: #f8f9fa;
+        }
+
+        .team-role {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .team-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+
+        .team-desc {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .features-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .features-list li {
+            padding: 12px 0;
+            padding-left: 35px;
+            position: relative;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .features-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 24px;
+            height: 24px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 30px;
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .back-link:hover {
+            background: var(--primary-light);
+        }
+
+        @media (max-width: 768px) {
+            .about-title {
+                font-size: 28px;
+            }
+            .about-section {
+                padding: 25px;
+            }
+            .team-photo {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-header">
+        <a class="app-logo" href="/">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span class="logo-text">Календарь</span>
+        </a>
+
+        <nav class="header-nav">
+            <a href="/" class="nav-link">Календарь</a>
+            <a href="/tasks" class="nav-link">Задачи</a>
+            <a href="/about" class="nav-link nav-link--active">О проекте</a>
+            <form action="/logout" method="POST"><button type="submit" class="nav-logout">Выйти</button></form>
+        </nav>
+    </header>
+
+    <div class="about-container">
+        <a href="/" class="back-link">← Назад к календарю</a>
+
+        <h1 class="about-title">О проекте</h1>
+        <p class="about-subtitle">Персональный календарь событий и задач с расширенным функционалом</p>
+
+        <div class="about-section">
+            <h2>О проекте</h2>
+            <p>
+                Наш календарь — это современное веб-приложение для планирования событий и управления задачами.
+                Мы создали удобный инструмент, который поможет вам никогда не забывать о важных датах,
+                дедлайнах и мероприятиях.
+            </p>
+            <p>
+                Приложение поддерживает регистрацию пользователей, что позволяет синхронизировать данные
+                между устройствами и иметь доступ к своему календарю из любой точки мира.
+            </p>
+        </div>
+
+        <div class="about-section">
+            <h2>Возможности</h2>
+            <ul class="features-list">
+                <li>Просмотр событий по месяцам с навигацией</li>
+                <li>Добавление событий с датой и описанием</li>
+                <li>Создание и управление задачами</li>
+                <li>Уведомления о важных датах</li>
+                <li>Адаптивный дизайн для мобильных устройств</li>
+                <li>Сохранение данных в облаке</li>
+                <li>Безопасная авторизация</li>
+            </ul>
+        </div>
+
+        <div class="about-section">
+            <h2>Наша команда</h2>
+            <div class="team-grid">
+                <div class="team-card">
+                    <img src="\static\s.png"
+                        alt="Backend Developer"
+                         class="team-photo"
+                         onerror="this.onerror=null; this.src='/static/s.png';">
+                    <div class="team-info">
+                        <div class="team-role">Backend Developer</div>
+                        <div class="team-name">Куруц Владимир</div>
+                        <div class="team-desc">Разрабатывает серверную часть и работу с базой данных</div>
+                    </div>
+                </div>
+
+                <div class="team-card">
+                    <img src="/static/m.png"
+                         alt="Team Lead"
+                         class="team-photo"
+                         onerror="this.onerror=null; this.src='/static/m.png';">
+                    <div class="team-info">
+                        <div class="team-role">Team Lead</div>
+                        <div class="team-name">Ирошников Михаил</div>
+                        <div class="team-desc">Координирует работу команды и принимает ключевые решения</div>
+                    </div>
+                </div>
+
+                <div class="team-card">
+                    <img src="/static/v.png"
+                         alt="Frontend Developer"
+                         class="team-photo"
+                         onerror="this.onerror=null; this.src='/static/v.png';">
+                    <div class="team-info">
+                        <div class="team-role">Frontend Developer</div>
+                        <div class="team-name">Николаева Александра</div>
+                        <div class="team-desc">Отвечает за пользовательский интерфейс и клиентскую часть приложения</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="about-section">
+            <h2>Технологии</h2>
+            <p>
+                <strong>Backend:</strong> Python + FastAPI<br>
+                <strong>Database:</strong> PostgreSQL<br>
+                <strong>Frontend:</strong> HTML + CSS + JavaScript<br>
+                <strong>Deployment:</strong> Docker
+            </p>
+        </div>
+    </div>
+</body>
+</html>

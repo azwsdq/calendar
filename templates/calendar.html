@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ month_name }} {{ year }} — Календарь</title>
-
     <!-- PWA Meta -->
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +11,6 @@
     <meta name="apple-mobile-web-app-title" content="Календарь">
     <link rel="manifest" href="{{ url_for('static', path='/manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', path='/icon-192.png') }}">
-
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
@@ -29,6 +27,7 @@
         <nav class="header-nav">
             <a href="/" class="nav-link nav-link--active">Календарь</a>
             <a href="/tasks" class="nav-link">Задачи</a>
+            <a href="/about" class="nav-link">О проекте</a>
             <form action="/logout" method="POST"><button type="submit" class="nav-logout">Выйти</button></form>
         </nav>
     </header>
@@ -36,6 +35,7 @@
     <div class="mobile-nav-dropdown" id="mobileNav">
         <a href="/" class="nav-link nav-link--active">Календарь</a>
         <a href="/tasks" class="nav-link">Задачи</a>
+        <a href="/about" class="nav-link">О проекте</a>
         <form action="/logout" method="POST"><button type="submit" class="nav-logout" style="width:100%">Выйти</button></form>
     </div>
 
@@ -56,7 +56,7 @@
         </div>
 
         <section class="add-form-card">
-            <h2>Новое событие</h2>
+            <h2>НОВОЕ СОБЫТИЕ</h2>
             <form class="add-form" action="/add_event" method="POST">
                 <input type="text" name="title" placeholder="Название" required>
                 <div class="select-wrapper">
@@ -98,7 +98,7 @@
                             {% set month_str = "%02d"|format(month) %}
                             {% set full_date = day_str ~ "." ~ month_str ~ "." ~ year %}
 
-                            <div class="day clickable-day" onclick="openDayModal({{ day }})">
+                            <div class="day clickable-day" onclick="openDayModal({{day}})">
                                 <span class="day-num">{{day}}</span>
                                 <div class="day-events-mini">
                                     {% for e in events_by_day.get(day, []) %}
@@ -189,7 +189,6 @@
     </div>
 
     <div id="calendar-data" data-month="{{ month }}" class="visually-hidden"></div>
-
     <script src="{{ url_for('static', path='/main.js') }}" defer></script>
 
     <!-- Service Worker -->

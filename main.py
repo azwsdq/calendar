@@ -2,9 +2,11 @@ from fastapi import FastAPI, Request, Form, Depends
 from typing import Optional
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from pywebpush import webpush, WebPushException
+import json
 import calendar
 import os
 import bcrypt
@@ -13,15 +15,180 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from database import engine, get_db, Base
-from models import Event, User
+from models import User, Event, PushSubscription
+# from models import Event as event
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
+
+scheduler = AsyncIOScheduler()
+
+@app.on_event("startup")
+async def start_scheduler():
+    scheduler.add_job(
+        send_daily_reminders,
+        CronTrigger(hour=23, minute=30),
+    )
+    scheduler.start()
+
+@app.on_event("shutdown")
+async def stop_scheduler():
+    scheduler.shutdown()
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+@app.get("/sw.js")
+async def sw():
+    return FileResponse("static/sw.js")
+
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    user_id = request.session.get("user_id")
+    existing = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == data["endpoint"]
+    ).first()
+    if not existing:
+        sub = PushSubscription(
+            user_id=user_id,
+            endpoint=data["endpoint"],
+            p256dh=data["keys"]["p256dh"],
+            auth=data["keys"]["auth"],
+        )
+        db.add(sub)
+        db.commit()
+    return {"ok": True}
+
+async def send_daily_reminders():
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        today = datetime.now().date()
+
+        # Находим все события на сегодня
+        events_today = db.query(Event).filter(Event.date == today).all()
+        if not events_today:
+            return
+
+        # Группируем по пользователям
+        user_events = {}
+        for ev in events_today:
+            user_events.setdefault(ev.user_id, []).append(ev.title)
+
+        # Отправляем каждому пользователю
+        for user_id, titles in user_events.items():
+            subs = db.query(PushSubscription).filter(
+                PushSubscription.user_id == user_id
+            ).all()
+
+            body = "Сегодня: " + ", ".join(titles)
+            payload = json.dumps({
+                "title": "‼️ Скоро дедлайн!!!",
+                "body": body,
+                "url": "/",
+            })
+
+            for sub in subs:
+                try:
+                    webpush(
+                        subscription_info={
+                            "endpoint": sub.endpoint,
+                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                        },
+                        data=payload,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims={"sub": "mailto:test@test.com"},
+                    )
+                except WebPushException as e:
+                    print(f"Ошибка: {e}")
+                    if "410" in str(e) or "404" in str(e):
+                        db.delete(sub)
+                        db.commit()
+    finally:
+        db.close()
+
+# @app.post("/push/data_calendar")
+# async def data_calendar(request: Request, db: Session = Depends(get_db)):
+#     user_id = request.session.get("user_id")
+#     subs = db.query(PushSubscription).filter(
+#         PushSubscription.user_id == user_id
+#     ).all()
+
+
+
+#     if not subs:
+#         return {"ok": False, "message": "Нет подписчиков"}
+#     payload = json.dumps({
+#         "title": "ДАТА!",
+#         "body": "что то там завтра",
+#         "url": "/",
+#     })
+#     for sub in subs:
+#         try:
+#             webpush(
+#                 subscription_info={
+#                     "endpoint": sub.endpoint,
+#                     "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+#                 },
+#                 data=payload,
+#                 vapid_private_key=VAPID_PRIVATE_KEY,
+#                 vapid_claims={"sub": "mailto:test@test.com"},
+#             )
+#         except WebPushException as e:
+#             print(f"Ошибка: {e}")
+#             if "410" in str(e) or "404" in str(e):
+#                 db.delete(sub)
+#                 db.commit()
+#     return {"ok": True}
+
+@app.get("/test-push")
+async def test_push():
+    await send_daily_reminders()
+    return {"ok": True}
+
+@app.post("/push/send")
+async def push_send(request: Request, db: Session = Depends(get_db)):
+    user_id = request.session.get("user_id")
+    subs = db.query(PushSubscription).filter(
+        PushSubscription.user_id == user_id
+    ).all()
+    if not subs:
+        return {"ok": False, "message": "Нет подписчиков"}
+    payload = json.dumps({
+        "title": "Напоминание!",
+        "body": "У вас есть предстоящие события",
+        "url": "/",
+    })
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": "mailto:test@test.com"},
+            )
+        except WebPushException as e:
+            print(f"Ошибка: {e}")
+            if "410" in str(e) or "404" in str(e):
+                db.delete(sub)
+                db.commit()
+    return {"ok": True}
+
+# Middleware аутентификации — перенаправляет незалогиненных пользователей на /login
 class AuthMiddleware(BaseHTTPMiddleware):
     PUBLIC = {"/login", "/register", "/static"}
 
@@ -174,17 +341,15 @@ async def calendar_page(
                         events_by_day[day].append(event)
                 current_date += timedelta(days=1)
 
-    return templates.TemplateResponse(
-        request,
-        "calendar.html",
-        {
-            "year": year,
-            "month": month,
-            "month_name": month_name,
-            "calendar": month_calendar,
-            "events_by_day": events_by_day,
-        }
-    )
+    return templates.TemplateResponse("calendar.html", {
+        "request": request,
+        "year": year,
+        "month": month,
+        "month_name": month_name,
+        "calendar": month_calendar,
+        "events_by_day": events_by_day,
+        "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY"),
+    })
 
 
 @app.post("/add_event")
@@ -329,6 +494,13 @@ async def edit_task(
         db.commit()
     return RedirectResponse(url="/tasks", status_code=303)
 
+@app.get("/about")
+async def about_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "about.html",
+        {}
+    )
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

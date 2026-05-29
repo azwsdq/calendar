@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   # PostgreSQL база данных
   db:
     image: postgres:16-alpine
-    container_name: postgres
+    container_name: calendar_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
