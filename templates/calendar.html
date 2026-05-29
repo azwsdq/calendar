@@ -98,8 +98,8 @@
                             {% set month_str = "%02d"|format(month) %}
                             {% set full_date = day_str ~ "." ~ month_str ~ "." ~ year %}
 
-                            <div class="day clickable-day" onclick="openDayModal({{day}})">
-                                <span class="day-num">{{day}}</span>
+                            <div class="day clickable-day" onclick="openDayModal({{ day }})">
+                                <span class="day-num">{{ day }}</span>
                                 <div class="day-events-mini">
                                     {% for e in events_by_day.get(day, []) %}
                                         <div class="event-mini priority-{{ e.priority|lower }}" title="{{ e.title }}">

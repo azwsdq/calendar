@@ -340,15 +340,18 @@ async def calendar_page(
                         events_by_day[day].append(event)
                 current_date += timedelta(days=1)
 
-    return templates.TemplateResponse("calendar.html", {
-        "request": request,
-        "year": year,
-        "month": month,
-        "month_name": month_name,
-        "calendar": month_calendar,
-        "events_by_day": events_by_day,
-        "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY"),
-    })
+    return templates.TemplateResponse(
+        request,
+        "calendar.html",
+        {
+            "year": year,
+            "month": month,
+            "month_name": month_name,
+            "calendar": month_calendar,
+            "events_by_day": events_by_day,
+            "vapid_public_key": os.getenv("VAPID_PUBLIC_KEY"),
+        },
+    )
 
 
 @app.post("/add_event")
