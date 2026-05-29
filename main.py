@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
+import uvicorn
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pywebpush import webpush, WebPushException
