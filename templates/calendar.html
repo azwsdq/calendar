@@ -13,7 +13,6 @@
     <meta name="apple-mobile-web-app-title" content="Календарь">
     <link rel="manifest" href="{{ url_for('static', path='/manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', path='/icon-192.png') }}">
-
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
@@ -27,10 +26,9 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
 
-        <nav class="header-nav">
+       <nav class="header-nav">
             <a href="/" class="nav-link nav-link--active">Календарь</a>
             <a href="/tasks" class="nav-link">Задачи</a>
-            <a href="/warning" class="nav-link" style="color: #ef4444; font-weight: 600;">⚠️ Смерть в нищите</a>
             <form action="/logout" method="POST"><button type="submit" class="nav-logout">Выйти</button></form>
         </nav>
         <button class="nav-logout" onclick="subscribePush()">Уведомления</button>
@@ -39,7 +37,6 @@
     <div class="mobile-nav-dropdown" id="mobileNav">
         <a href="/" class="nav-link nav-link--active">Календарь</a>
         <a href="/tasks" class="nav-link">Задачи</a>
-        <a href="/warning" class="nav-link" style="color: #ef4444;">⚠️ Важная информация</a>
         <form action="/logout" method="POST"><button type="submit" class="nav-logout" style="width:100%">Выйти</button></form>
     </div>
 

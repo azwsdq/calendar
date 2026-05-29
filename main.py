@@ -11,6 +11,7 @@ from models import PushSubscription
 import json
 import calendar
 import os
+import uvicorn
 import bcrypt
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -111,12 +112,10 @@ async def send_hourly_reminders():
             deadline_hour = ev.deadline_time.hour
             hours_left = deadline_hour - current_hour
 
-            # if hours_left in (1, 2, 3, 4, 5, 6, 7, 8) or True:  # ← форсируем отправку
-            #     notify.append((ev, "🔴 ТЕСТ дедлайна!", f"hours_left={hours_left}"))
             if hours_left == 3:
-                notify.append((ev, "🟠 До дедлайна 3 часа!", "Осталось 3 часа"))
+                notify.append((ev, "До дедлайна 3 часа!", "Осталось 3 часа"))
             elif hours_left == 1:
-                notify.append((ev, "🔴 До дедлайна 1 час!", "Остался 1 час"))
+                notify.append((ev, "До дедлайна 1 час!", "Остался 1 час"))
 
         print(f"[HOURLY] К отправке: {len(notify)}")
 
@@ -156,76 +155,6 @@ async def send_hourly_reminders():
     finally:
         db.close()
 
-# async def send_hourly_reminders():
-#     """Уведомления за 3 часа и 1 час до конца рабочего дня дедлайна."""
-#     from database import SessionLocal
-#     from sqlalchemy import or_, and_
-#     db = SessionLocal()
-#     try:
-#         now = datetime.now()
-#         today = now.date()
-#         current_hour = now.hour   # например 15
-
-#         # Считаем: "дедлайн в конце дня" = 18:00 (конец рабочего дня)
-#         DEADLINE_HOUR = 18
-
-#         # За 3 часа: уведомляем когда current_hour == DEADLINE_HOUR - 3
-#         # За 1 час:  уведомляем когда current_hour == DEADLINE_HOUR - 1
-#         offset_map = {
-#             DEADLINE_HOUR - 3: ("🟠 До дедлайна 3 часа!", "Осталось 3 часа"),
-#             DEADLINE_HOUR - 1: ("🔴 До дедлайна 1 час!", "Остался 1 час"),
-#         }
-
-#         if current_hour not in offset_map:
-#             return  # Не наш час — выходим
-
-#         title, label = offset_map[current_hour]
-
-#         # Ищем события с дедлайном сегодня
-#         events = db.query(Event).filter(
-#             or_(
-#                 Event.date_end == today,
-#                 and_(Event.date_end == None, Event.date == today),
-#             )
-#         ).all()
-
-#         if not events:
-#             return
-
-#         user_events = {}
-#         for ev in events:
-#             user_events.setdefault(ev.user_id, []).append(ev.title)
-
-#         for user_id, titles in user_events.items():
-#             subs = db.query(PushSubscription).filter(
-#                 PushSubscription.user_id == user_id
-#             ).all()
-
-#             payload = json.dumps({
-#                 "title": title,
-#                 "body": f"{label}: " + ", ".join(titles),
-#                 "url": "/tasks",
-#             })
-
-#             for sub in subs:
-#                 try:
-#                     webpush(
-#                         subscription_info={
-#                             "endpoint": sub.endpoint,
-#                             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-#                         },
-#                         data=payload,
-#                         vapid_private_key=VAPID_PRIVATE_KEY,
-#                         vapid_claims={"sub": "mailto:test@test.com"},
-#                     )
-#                 except WebPushException as e:
-#                     print(f"Ошибка push (hourly): {e}")
-#                     if "410" in str(e) or "404" in str(e):
-#                         db.delete(sub)
-#                         db.commit()
-#     finally:
-#         db.close()
-
 async def send_daily_reminders():
     from database import SessionLocal
     db = SessionLocal()
@@ -234,10 +163,10 @@ async def send_daily_reminders():
 
         # Дни, за которые уведомляем (0 = сегодня дедлайн)
         notify_offsets = {
-            0: ("🔴 Дедлайн сегодня!", "Срок истекает сегодня"),
-            1: ("🟠 Завтра дедлайн!", "Остался 1 день"),
-            3: ("🟡 До дедлайна 3 дня", "Осталось 3 дня"),
-            7: ("🔵 До дедлайна неделя", "Осталось 7 дней"),
+            0: ("Дедлайн сегодня!", "Срок истекает сегодня"),
+            1: ("Завтра дедлайн!", "Остался 1 день"),
+            3: ("До дедлайна 3 дня", "Осталось 3 дня"),
+            7: ("До дедлайна неделя", "Осталось 7 дней"),
         }
 
         for offset, (title, label) in notify_offsets.items():
@@ -291,89 +220,6 @@ async def send_daily_reminders():
                             db.commit()
     finally:
         db.close()
-
-# async def send_daily_reminders():
-#     from database import SessionLocal
-#     db = SessionLocal()
-#     try:
-#         today = datetime.now().date()
-        
-#         # Находим все события на сегодня
-#         events_today = db.query(Event).filter(Event.date == today).all()
-#         if not events_today:
-#             return
-
-#         # Группируем по пользователям
-#         user_events = {}
-#         for ev in events_today:
-#             user_events.setdefault(ev.user_id, []).append(ev.title)
-
-#         # Отправляем каждому пользователю
-#         for user_id, titles in user_events.items():
-#             subs = db.query(PushSubscription).filter(
-#                 PushSubscription.user_id == user_id
-#             ).all()
-
-#             body = "Сегодня: " + ", ".join(titles)
-#             payload = json.dumps({
-#                 "title": "‼️ Скоро дедлайн!!!",
-#                 "body": body,
-#                 "url": "/",
-#             })
-
-#             for sub in subs:
-#                 try:
-#                     webpush(
-#                         subscription_info={
-#                             "endpoint": sub.endpoint,
-#                             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-#                         },
-#                         data=payload,
-#                         vapid_private_key=VAPID_PRIVATE_KEY,
-#                         vapid_claims={"sub": "mailto:test@test.com"},
-#                     )
-#                 except WebPushException as e:
-#                     print(f"Ошибка: {e}")
-#                     if "410" in str(e) or "404" in str(e):
-#                         db.delete(sub)
-#                         db.commit()
-#     finally:
-#         db.close()
-
-# @app.post("/push/data_calendar")
-# async def data_calendar(request: Request, db: Session = Depends(get_db)):
-#     user_id = request.session.get("user_id")
-#     subs = db.query(PushSubscription).filter(
-#         PushSubscription.user_id == user_id
-#     ).all()
-
-    
-
-#     if not subs:
-#         return {"ok": False, "message": "Нет подписчиков"}
-#     payload = json.dumps({
-#         "title": "ДАТА!",
-#         "body": "что то там завтра",
-#         "url": "/",
-#     })
-#     for sub in subs:
-#         try:
-#             webpush(
-#                 subscription_info={
-#                     "endpoint": sub.endpoint,
-#                     "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-#                 },
-#                 data=payload,
-#                 vapid_private_key=VAPID_PRIVATE_KEY,
-#                 vapid_claims={"sub": "mailto:test@test.com"},
-#             )
-#         except WebPushException as e:
-#             print(f"Ошибка: {e}")
-#             if "410" in str(e) or "404" in str(e):
-#                 db.delete(sub)
-#                 db.commit()
-#     return {"ok": True}
-
 @app.get("/test-push-hourly")
 async def test_push_hourly():
     await send_hourly_reminders()
@@ -428,7 +274,7 @@ async def test_push_now(request: Request, db: Session = Depends(get_db)):
         return {"ok": False, "message": "Нет подписок — сначала нажми кнопку Уведомления на главной"}
 
     payload = json.dumps({
-        "title": "🔴 Тест уведомления",
+        "title": "Тест уведомления",
         "body": "Уведомления работают!",
         "url": "/tasks",
     })
@@ -444,9 +290,9 @@ async def test_push_now(request: Request, db: Session = Depends(get_db)):
                 vapid_private_key=VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": "mailto:test@test.com"},
             )
-            print(f"[TEST] ✅ Push отправлен")
+            print(f"[TEST] Push отправлен")
         except WebPushException as e:
-            print(f"[TEST] ❌ Ошибка: {e}")
+            print(f"[TEST] Ошибка: {e}")
 
     return {"ok": True}
 
@@ -774,17 +620,9 @@ async def edit_task(
             h, m = map(int, deadline_time.split(":"))
             task.deadline_time = dt_time(h, m)
         else:
-            task.deadline_time = None 
+            task.deadline_time = None
 
     return RedirectResponse(url="/tasks", status_code=303)
-
-@app.get("/warning")
-async def warning_page(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "warning.html",
-        {}
-    )
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
