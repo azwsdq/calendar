@@ -13,6 +13,7 @@ import calendar
 import os
 import uvicorn
 import bcrypt
+import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from datetime import time as dt_time
@@ -623,6 +624,7 @@ async def edit_task(
             task.deadline_time = None
 
     return RedirectResponse(url="/tasks", status_code=303)
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
