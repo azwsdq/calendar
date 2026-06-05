@@ -147,7 +147,7 @@
                                 <p class="event-date">{{ e.date.strftime('%d.%m.%Y') }}</p>
                             {% endif %}
                             {% if e.deadline_time %}
-                                <p style="color: var(--text-muted); font-size: 13px;">⏳ Дедлайн в {{ e.deadline_time.strftime('%H:%M') }}</p>
+                                <p style="color: var(--text-muted); font-size: 13px;">Дедлайн в {{ e.deadline_time.strftime('%H:%M') }}</p>
                             {% endif %}
                             <p>{{ e.description or 'Нет описания' }}</p>
                         </div>
@@ -175,7 +175,7 @@
 
     <!-- PWA Install Banner -->
     <div id="install-banner" style="display: none; background: var(--primary); color: white; padding: 12px; text-align: center; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;">
-      <p style="margin: 0 0 8px 0; font-size: 14px;">📲 Установите приложение Календарь</p>
+      <p style="margin: 0 0 8px 0; font-size: 14px;">Установите приложение Календарь</p>
       <button id="install-btn" class="btn-primary" style="background: white; color: var(--primary); margin: 0 4px;">Установить</button>
       <button id="dismiss-install" style="background: none; border: none; color: white; margin: 0 4px; cursor: pointer;">✕</button>
     </div>

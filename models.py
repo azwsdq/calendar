@@ -7,7 +7,7 @@ class Event(Base):
     title = Column(String, index=True)
     date = Column(Date)  # Начало периода
     date_end = Column(Date, nullable=True)  # Конец периода (опционально)
-    deadline_time = Column(Time, nullable=True)
+    deadline_time = Column(Time, nullable=True)  # Время дедлайна
     description = Column(String, nullable=True)
     priority = Column(String, default="Medium")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)

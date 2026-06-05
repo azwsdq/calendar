@@ -1,10 +1,11 @@
-from fastapi import FastAPI, Request, Form, Depends
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, Form, Depends, status
 from typing import Optional
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, FileResponse
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 from pywebpush import webpush, WebPushException
 import json
 import calendar
@@ -14,73 +15,17 @@ import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from database import engine, get_db, Base
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from database import engine, get_db, Base, run_migrations
 from models import User, Event, PushSubscription
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-
-
-
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-
-
 Base.metadata.create_all(bind=engine)
-app = FastAPI()
+run_migrations()
+
 
 scheduler = AsyncIOScheduler()
 
-# Запуск планировщика
-@app.on_event("startup")
-async def start_scheduler():
-    # Ежедневные — за 7, 3, 1 день
-    scheduler.add_job(
-        send_daily_reminders,
-        CronTrigger(hour=9, minute=0),
-    )
-    # Внутридневные — за 3ч и 1ч (запускается каждый час, сама разбирается)
-    scheduler.add_job(
-        send_hourly_reminders,
-        CronTrigger(minute=0),   # каждый час в :00
-    )
-    scheduler.start()
-
-@app.on_event("shutdown")
-async def stop_scheduler():
-    scheduler.shutdown()
-
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.get("/sw.js")
-async def sw():
-    return FileResponse("static/sw.js")
-
-
-VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
-VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
-
-
-@app.post("/push/subscribe")
-async def push_subscribe(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    user_id = request.session.get("user_id")
-    existing = db.query(PushSubscription).filter(
-        PushSubscription.endpoint == data["endpoint"]
-    ).first()
-    if not existing:
-        sub = PushSubscription(
-            user_id=user_id,
-            endpoint=data["endpoint"],
-            p256dh=data["keys"]["p256dh"],
-            auth=data["keys"]["auth"],
-        )
-        db.add(sub)
-        db.commit()
-    return {"ok": True}
 
 async def send_hourly_reminders():
     from database import SessionLocal
@@ -103,7 +48,7 @@ async def send_hourly_reminders():
 
         print(f"[HOURLY] Найдено событий с дедлайном сегодня и временем: {len(events)}")
         for ev in events:
-            print(f"[HOURLY] Событие: '{ev.title}', deadline_time: {ev.deadline_time}, hours_left: {ev.deadline_time.hour - current_hour}")
+            print(f"[HOURLY] Событие: '{ev.title}', deadline_time: {ev.deadline_time}")
 
         if not events:
             print("[HOURLY] Нет событий — выход")
@@ -148,9 +93,9 @@ async def send_hourly_reminders():
                             vapid_private_key=VAPID_PRIVATE_KEY,
                             vapid_claims={"sub": "mailto:test@test.com"},
                         )
-                        print(f"[HOURLY]  Push отправлен: {push_title}")
+                        print(f"[HOURLY] Push отправлен: {push_title}")
                     except WebPushException as e:
-                        print(f"[HOURLY]  Ошибка push: {e}")
+                        print(f"[HOURLY] Ошибка push: {e}")
                         if "410" in str(e) or "404" in str(e) or "400" in str(e):
                             db.delete(sub)
                             db.commit()
@@ -159,6 +104,7 @@ async def send_hourly_reminders():
 
 async def send_daily_reminders():
     from database import SessionLocal
+    from sqlalchemy import or_, and_
     db = SessionLocal()
     try:
         today = datetime.now().date()
@@ -173,9 +119,6 @@ async def send_daily_reminders():
         for offset, (title, label) in notify_offsets.items():
             target_date = today + timedelta(days=offset)
 
-            # Ищем события, у которых date_end == target_date
-            # или date == target_date (если date_end не задан)
-            from sqlalchemy import or_, and_
             events = db.query(Event).filter(
                 or_(
                     and_(Event.date_end == target_date),
@@ -220,15 +163,98 @@ async def send_daily_reminders():
                             db.commit()
     finally:
         db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("[STARTUP] Запуск планировщика...")
+    scheduler.add_job(send_daily_reminders, CronTrigger(hour=9, minute=0))
+    scheduler.add_job(send_hourly_reminders, CronTrigger(minute=0))
+    scheduler.start()
+    print("[STARTUP] Планировщик запущен")
+
+    yield
+
+    print("[SHUTDOWN] Остановка планировщика...")
+    scheduler.shutdown()
+    print("[SHUTDOWN] Планировщик остановлен")
+
+
+app = FastAPI(lifespan=lifespan)
+
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    PUBLIC = {"/login", "/register", "/static"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/static") or path in self.PUBLIC:
+            return await call_next(request)
+        if not request.session.get("user_id"):
+            return RedirectResponse(url="/login", status_code=302)
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SECRET_KEY", "change-me-in-production"),
+    session_cookie="session",
+    max_age=86400 * 7,
+    https_only=False,
+)
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+
+@app.get("/sw.js")
+async def sw():
+    return FileResponse("static/sw.js")
+
+
+@app.post("/push/subscribe")
+async def push_subscribe(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    user_id = request.session.get("user_id")
+    existing = db.query(PushSubscription).filter(
+        PushSubscription.endpoint == data["endpoint"]
+    ).first()
+    if not existing:
+        sub = PushSubscription(
+            user_id=user_id,
+            endpoint=data["endpoint"],
+            p256dh=data["keys"]["p256dh"],
+            auth=data["keys"]["auth"],
+        )
+        db.add(sub)
+        db.commit()
+    return {"ok": True}
+
+
 @app.get("/test-push-hourly")
 async def test_push_hourly():
     await send_hourly_reminders()
     return {"ok": True}
 
+
 @app.get("/test-push")
 async def test_push():
     await send_daily_reminders()
     return {"ok": True}
+
 
 @app.post("/push/send")
 async def push_send(request: Request, db: Session = Depends(get_db)):
@@ -260,6 +286,7 @@ async def push_send(request: Request, db: Session = Depends(get_db)):
                 db.delete(sub)
                 db.commit()
     return {"ok": True}
+
 
 @app.get("/test-push-now")
 async def test_push_now(request: Request, db: Session = Depends(get_db)):
@@ -298,165 +325,11 @@ async def test_push_now(request: Request, db: Session = Depends(get_db)):
 
 
 
-Base.metadata.create_all(bind=engine)
-app = FastAPI()
-
-scheduler = AsyncIOScheduler()
-
-@app.on_event("startup")
-async def start_scheduler():
-    scheduler.add_job(
-        send_daily_reminders,
-        CronTrigger(hour=23, minute=30),
-    )
-    scheduler.start()
-
-@app.on_event("shutdown")
-async def stop_scheduler():
-    scheduler.shutdown()
-
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.get("/sw.js")
-async def sw():
-    return FileResponse("static/sw.js")
-
-
-VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
-VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
-
-
-@app.post("/push/subscribe")
-async def push_subscribe(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    user_id = request.session.get("user_id")
-    existing = db.query(PushSubscription).filter(
-        PushSubscription.endpoint == data["endpoint"]
-    ).first()
-    if not existing:
-        sub = PushSubscription(
-            user_id=user_id,
-            endpoint=data["endpoint"],
-            p256dh=data["keys"]["p256dh"],
-            auth=data["keys"]["auth"],
-        )
-        db.add(sub)
-        db.commit()
+@app.post("/clear-messages")
+async def clear_messages(request: Request):
+    request.session.pop("success_message", None)
+    request.session.pop("error_message", None)
     return {"ok": True}
-
-async def send_daily_reminders():
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        today = datetime.now().date()
-
-        events_today = db.query(Event).filter(Event.date == today).all()
-        if not events_today:
-            return
-
-        user_events = {}
-        for ev in events_today:
-            user_events.setdefault(ev.user_id, []).append(ev.title)
-
-        for user_id, titles in user_events.items():
-            subs = db.query(PushSubscription).filter(
-                PushSubscription.user_id == user_id
-            ).all()
-
-            body = "Сегодня: " + ", ".join(titles)
-            payload = json.dumps({
-                "title": "Скоро дедлайн!!!",
-                "body": body,
-                "url": "/",
-            })
-
-            for sub in subs:
-                try:
-                    webpush(
-                        subscription_info={
-                            "endpoint": sub.endpoint,
-                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-                        },
-                        data=payload,
-                        vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims={"sub": "mailto:test@test.com"},
-                    )
-                except WebPushException as e:
-                    print(f"Ошибка: {e}")
-                    if "410" in str(e) or "404" in str(e):
-                        db.delete(sub)
-                        db.commit()
-    finally:
-        db.close()
-
-
-@app.get("/test-push")
-async def test_push():
-    await send_daily_reminders()
-    return {"ok": True}
-
-@app.post("/push/send")
-async def push_send(request: Request, db: Session = Depends(get_db)):
-    user_id = request.session.get("user_id")
-    subs = db.query(PushSubscription).filter(
-        PushSubscription.user_id == user_id
-    ).all()
-    if not subs:
-        return {"ok": False, "message": "Нет подписчиков"}
-    payload = json.dumps({
-        "title": "Напоминание!",
-        "body": "У вас есть предстоящие события",
-        "url": "/",
-    })
-    for sub in subs:
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": sub.endpoint,
-                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-                },
-                data=payload,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": "mailto:test@test.com"},
-            )
-        except WebPushException as e:
-            print(f"Ошибка: {e}")
-            if "410" in str(e) or "404" in str(e):
-                db.delete(sub)
-                db.commit()
-    return {"ok": True}
-
-# Middleware аутентификации — перенаправляет незалогиненных пользователей на /login
-class AuthMiddleware(BaseHTTPMiddleware):
-    PUBLIC = {"/login", "/register", "/static"}
-
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        if path.startswith("/static") or path in self.PUBLIC:
-            return await call_next(request)
-        if not request.session.get("user_id"):
-            return RedirectResponse(url="/login", status_code=302)
-        return await call_next(request)
-
-
-app.add_middleware(AuthMiddleware)
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.getenv("SECRET_KEY", "change-me-in-production"),
-    session_cookie="session",
-    max_age=86400 * 7,
-    https_only=False,
-)
-
-
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 @app.get("/register")
@@ -497,7 +370,7 @@ async def register(
     db.commit()
     db.refresh(user)
     request.session["user_id"] = user.id
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/login")
@@ -524,7 +397,7 @@ async def login(
             {"error": "Неверный email или пароль", "email": email}
         )
     request.session["user_id"] = user.id
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/logout")
@@ -575,9 +448,9 @@ async def calendar_page(
                 current_date += timedelta(days=1)
 
     return templates.TemplateResponse(
+        request,
         "calendar.html",
         {
-            "request": request,
             "year": year,
             "month": month,
             "month_name": month_name,
@@ -599,33 +472,41 @@ async def add_event(
         priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
-    start_date = datetime.strptime(date, "%Y-%m-%d").date()
+    try:
+        start_date = datetime.strptime(date, "%Y-%m-%d").date()
 
-    if not date_end or date_end.strip() == "" or date_end == date:
-        end_date = None
-    else:
-        end_date = datetime.strptime(date_end, "%Y-%m-%d").date()
-        if end_date < start_date:
+        if not date_end or date_end.strip() == "" or date_end == date:
             end_date = None
+        else:
+            end_date = datetime.strptime(date_end, "%Y-%m-%d").date()
+            if end_date < start_date:
+                end_date = None
 
-    parsed_time = None
-    if deadline_time:
-        h, m = map(int, deadline_time.split(":"))
-        parsed_time = dt_time(h, m)
+        parsed_time = None
+        if deadline_time:
+            h, m = map(int, deadline_time.split(":"))
+            parsed_time = dt_time(h, m)
 
-    new_event = Event(
-        title=title,
-        date=start_date,
-        date_end=end_date,
-        deadline_time=parsed_time,
-        description=description or "",
-        priority=priority,
-        user_id=request.session.get("user_id"),
-    )
-    db.add(new_event)
-    db.commit()
-    db.refresh(new_event)
-    return RedirectResponse(url="/", status_code=303)
+        new_event = Event(
+            title=title,
+            date=start_date,
+            date_end=end_date,
+            deadline_time=parsed_time,
+            description=description or "",
+            priority=priority,
+            user_id=request.session.get("user_id"),
+        )
+        db.add(new_event)
+        db.commit()
+        db.refresh(new_event)
+
+        request.session["success_message"] = "Событие успешно добавлено!"
+
+    except Exception as e:
+        db.rollback()
+        request.session["error_message"] = f"Ошибка при добавлении: {str(e)}"
+
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/delete_event")
@@ -670,32 +551,41 @@ async def add_task(
         priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
-    start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+    try:
+        start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
 
-    if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
-        end_date = None
-    else:
-        end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
-        if end_date < start_date:
+        if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
             end_date = None
+        else:
+            end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
+            if end_date < start_date:
+                end_date = None
 
-    parsed_time = None
-    if deadline_time:
-        h, m = map(int, deadline_time.split(":"))
-        parsed_time = dt_time(h, m)
+        parsed_time = None
+        if deadline_time:
+            h, m = map(int, deadline_time.split(":"))
+            parsed_time = dt_time(h, m)
 
-    new_event = Event(
-        title=title,
-        description=description or "",
-        date=start_date,
-        date_end=end_date,
-        deadline_time=parsed_time,
-        priority=priority,
-        user_id=request.session.get("user_id"),
-    )
-    db.add(new_event)
-    db.commit()
-    return RedirectResponse(url="/tasks", status_code=303)
+        new_event = Event(
+            title=title,
+            description=description or "",
+            date=start_date,
+            date_end=end_date,
+            deadline_time=parsed_time,
+            priority=priority,
+            user_id=request.session.get("user_id"),
+        )
+        db.add(new_event)
+        db.commit()
+        db.refresh(new_event)
+
+        request.session["success_message"] = "Задача успешно добавлена!"
+
+    except Exception as e:
+        db.rollback()
+        request.session["error_message"] = f"Ошибка при добавлении: {str(e)}"
+
+    return RedirectResponse(url="/tasks", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/delete_task")
@@ -724,31 +614,37 @@ async def edit_task(
         priority: str = Form("Medium"),
         db: Session = Depends(get_db),
 ):
-    user_id = request.session.get("user_id")
-    task = db.query(Event).filter(Event.id == task_id, Event.user_id == user_id).first()
-    if task:
-        task.title = title
-        task.description = description or ""
-        task.date = datetime.strptime(due_date, "%Y-%m-%d").date()
+    try:
+        user_id = request.session.get("user_id")
+        task = db.query(Event).filter(Event.id == task_id, Event.user_id == user_id).first()
+        if task:
+            task.title = title
+            task.description = description or ""
+            task.date = datetime.strptime(due_date, "%Y-%m-%d").date()
 
-        if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
-            task.date_end = None
-        else:
-            end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
-            start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
-            if end_date >= start_date:
-                task.date_end = end_date
-            else:
+            if not due_date_end or due_date_end.strip() == "" or due_date_end == due_date:
                 task.date_end = None
+            else:
+                end_date = datetime.strptime(due_date_end, "%Y-%m-%d").date()
+                start_date = datetime.strptime(due_date, "%Y-%m-%d").date()
+                if end_date >= start_date:
+                    task.date_end = end_date
+                else:
+                    task.date_end = None
 
-        task.priority = priority
-        db.commit()
+            task.priority = priority
 
-        if deadline_time and deadline_time.strip():
-            h, m = map(int, deadline_time.split(":"))
-            task.deadline_time = dt_time(h, m)
-        else:
-            task.deadline_time = None
+            if deadline_time and deadline_time.strip():
+                h, m = map(int, deadline_time.split(":"))
+                task.deadline_time = dt_time(h, m)
+            else:
+                task.deadline_time = None
+
+            db.commit()
+            request.session["success_message"] = "Задача успешно обновлена!"
+    except Exception as e:
+        db.rollback()
+        request.session["error_message"] = f"Ошибка при обновлении: {str(e)}"
 
     return RedirectResponse(url="/tasks", status_code=303)
 

@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Задачи — Календарь</title>
 
-    <!-- PWA Meta -->
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -29,6 +28,8 @@
         <nav class="header-nav">
             <a href="/" class="nav-link">Календарь</a>
             <a href="/tasks" class="nav-link nav-link--active">Задачи</a>
+            <a href="/about" class="nav-link">О проекте</a>
+            <button class="nav-logout" onclick="subscribePush()">Уведомления</button>
             <form action="/logout" method="POST"><button type="submit" class="nav-logout">Выйти</button></form>
         </nav>
     </header>
@@ -36,10 +37,30 @@
     <div class="mobile-nav-dropdown" id="mobileNav">
         <a href="/" class="nav-link">Календарь</a>
         <a href="/tasks" class="nav-link nav-link--active">Задачи</a>
+        <a href="/about" class="nav-link">О проекте</a>
+        <button class="nav-logout" onclick="subscribePush()" style="width:100%">Уведомления</button>
         <form action="/logout" method="POST"><button type="submit" class="nav-logout" style="width:100%">Выйти</button></form>
     </div>
 
     <main class="app-container">
+        {% if request.session.get('success_message') %}
+        <div class="alert alert-success" id="successAlert" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <span>{{ request.session.get('success_message') }}</span>
+            <button type="button" onclick="this.parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;">&times;</button>
+        </div>
+        {% endif %}
+
+        {% if request.session.get('error_message') %}
+        <div class="alert alert-error" id="errorAlert" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <span>{{ request.session.get('error_message') }}</span>
+            <button type="button" onclick="this.parentElement.remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 24px; height: 24px; border-radius: 4px; cursor: pointer;">&times;</button>
+        </div>
+        {% endif %}
+
+        {% if request.session.get('success_message') or request.session.get('error_message') %}
+        <script>fetch('/clear-messages', {method: 'POST'});</script>
+        {% endif %}
+
         <div class="month-header">
             <h1 class="month-title">Задачи</h1>
         </div>
@@ -60,7 +81,6 @@
                 <input type="text" name="description" placeholder="Описание">
                 <button type="submit" class="btn-primary">+ Добавить</button>
 
-                <!-- Диапазон дат -->
                 <div class="date-range-row">
                     <div class="date-field" style="margin-top: 8px;">
                         <input type="time" name="deadline_time" id="deadline-time">
@@ -111,7 +131,7 @@
                                 {% endif %}
                                 {% if task.deadline_time %}
                                     <span class="task-due" style="color: var(--text-muted);">
-                                        ⏳ {{ task.deadline_time.strftime('%H:%M') }}
+                                        {{ task.deadline_time.strftime('%H:%M') }}
                                     </span>
                                 {% endif %}
                                 {% if task.priority %}
@@ -141,7 +161,6 @@
                                     <input type="text" name="description" value="{{ task.description or '' }}">
                                 </div>
 
-                                <!-- Диапазон дат в режиме редактирования -->
                                 <div class="task-edit-date-range">
                                     <div class="date-field">
                                         <input type="date" name="due_date" value="{{ task.date.strftime('%Y-%m-%d') }}" required>
@@ -173,7 +192,6 @@
 
     <script src="{{ url_for('static', path='/main.js') }}" defer></script>
 
-    <!-- Service Worker -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -184,9 +202,8 @@
         }
     </script>
 
-    <!-- PWA Install Banner -->
     <div id="install-banner" style="display: none; background: var(--primary); color: white; padding: 12px; text-align: center; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;">
-      <p style="margin: 0 0 8px 0; font-size: 14px;">📲 Установите приложение Календарь</p>
+      <p style="margin: 0 0 8px 0; font-size: 14px;">Установите приложение Календарь</p>
       <button id="install-btn" class="btn-primary" style="background: white; color: var(--primary); margin: 0 4px;">Установить</button>
       <button id="dismiss-install" style="background: none; border: none; color: white; margin: 0 4px; cursor: pointer;">✕</button>
     </div>
@@ -225,6 +242,34 @@
             dateStartInput.value = today;
         }
       });
+
+      // Подписка на уведомления
+      const VAPID_PUBLIC_KEY = '{{ vapid_public_key }}';
+
+      function urlBase64ToUint8Array(base64String) {
+          const padding = '='.repeat((4 - base64String.length % 4) % 4);
+          const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+          const rawData = atob(base64);
+          return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+      }
+
+      async function subscribePush() {
+          if (!('serviceWorker' in navigator)) return alert('Браузер не поддерживает SW');
+          const reg = await navigator.serviceWorker.register('/sw.js');
+          await navigator.serviceWorker.ready;
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') return alert('Разрешение отклонено');
+          const sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+          await fetch('/push/subscribe', {
+              method: 'POST',
+              body: JSON.stringify(sub),
+              headers: { 'Content-Type': 'application/json' },
+          });
+          alert('Уведомления включены!');
+      }
     </script>
 </body>
 </html>
