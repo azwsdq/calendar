@@ -16,4 +16,4 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            ssh -p 2222 -o StrictHostKeyChecking=no azwsdq@localhost "cd /home/azwsdq/all/calendar && git pull && docker compose up -d --build"
+            ssh -p 2222 -o StrictHostKeyChecking=no azwsdq@localhost "cd /home/azwsdq/all/calendar && git pull --rebase origin master && docker compose up -d --build"
