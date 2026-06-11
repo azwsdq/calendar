@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    ports: 
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+  frpc:
+    image: snowdreamtech/frpc
+    restart: unless-stopped
+    volumes:
+      - ./frpc-site.toml:/etc/frp/frpc.toml:ro
+volumes:
+  postgres_data:
