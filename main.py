@@ -180,7 +180,7 @@ async def lifespan(app: FastAPI):
     print("[SHUTDOWN] Планировщик остановлен")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
 
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
